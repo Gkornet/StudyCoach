@@ -123,11 +123,22 @@ export default function StudyCoach() {
         body: JSON.stringify({ messages: apiMessages, system: SYSTEM_PROMPT }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Server antwoord onleesbaar (status ${res.status})`);
+      }
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `Fout ${res.status}`);
+      }
+
       const reply = data.content?.[0]?.text || "Er ging iets mis, probeer het opnieuw!";
       setMessages([...newMessages, { role: "assistant", content: reply }]);
-    } catch {
-      setMessages([...newMessages, { role: "assistant", content: "Oeps! Er ging iets mis 😅 Probeer het opnieuw." }]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Onbekende fout";
+      setMessages([...newMessages, { role: "assistant", content: `Oeps! Er ging iets mis 😅\n\n${msg}` }]);
     } finally {
       setLoading(false);
     }

@@ -25,6 +25,15 @@ export async function POST(req: NextRequest) {
     }),
   });
 
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Anthropic API error:", response.status, errorText);
+    return NextResponse.json(
+      { error: `API fout (${response.status}): ${errorText}` },
+      { status: response.status }
+    );
+  }
+
   const data = await response.json();
   return NextResponse.json(data);
 }
