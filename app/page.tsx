@@ -2,12 +2,17 @@
 
 import { useState, useRef, useEffect } from "react";
 
+interface PdfFile {
+  data: string;
+  name: string;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
   image?: string;
   imageType?: string;
-  pdfName?: string;
+  pdfNames?: string[];
 }
 
 const SYSTEM_PROMPT = `Jij bent mijn persoonlijke wiskundedocent voor 3 vwo. Leg alles uit in korte, simpele stappen alsof ik het voor het eerst leer.
@@ -32,8 +37,7 @@ export default function StudyCoach() {
   const [loading, setLoading] = useState(false);
   const [image, setImage] = useState<string | null>(null);
   const [imageType, setImageType] = useState<string>("image/jpeg");
-  const [pdf, setPdf] = useState<string | null>(null);
-  const [pdfName, setPdfName] = useState<string>("");
+  const [pdfs, setPdfs] = useState<PdfFile[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -54,34 +58,38 @@ export default function StudyCoach() {
   };
 
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      alert("PDF is te groot (max 3 MB). Comprimeer het bestand of gebruik een kleinere PDF.");
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const tooBig = files.find(f => f.size > 3 * 1024 * 1024);
+    if (tooBig) {
+      alert(`"${tooBig.name}" is te groot (max 3 MB per PDF). Comprimeer het bestand.`);
       if (pdfInputRef.current) pdfInputRef.current.value = "";
       return;
     }
-    setPdfName(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setPdf((ev.target?.result as string).split(",")[1]);
-    };
-    reader.readAsDataURL(file);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const data = (ev.target?.result as string).split(",")[1];
+        setPdfs(prev => [...prev, { data, name: file.name }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    if (pdfInputRef.current) pdfInputRef.current.value = "";
   };
 
   const sendMessage = async () => {
-    if (!input.trim() && !image && !pdf) return;
+    if (!input.trim() && !image && !pdfs.length) return;
 
     let userContent = input;
     if (!userContent && image) userContent = "📷 [Foto gestuurd — los deze opgave op]";
-    if (!userContent && pdf) userContent = `📄 [PDF gestuurd: ${pdfName}]`;
+    if (!userContent && pdfs.length) userContent = pdfs.map(p => `📄 [PDF gestuurd: ${p.name}]`).join("\n");
 
     const userMsg: Message = {
       role: "user",
       content: userContent,
       image: image || undefined,
       imageType: image ? imageType : undefined,
-      pdfName: pdf ? pdfName : undefined,
+      pdfNames: pdfs.length ? pdfs.map(p => p.name) : undefined,
     };
 
     const newMessages = [...messages, userMsg];
@@ -89,10 +97,9 @@ export default function StudyCoach() {
     setInput("");
     const sentImage = image;
     const sentImageType = imageType;
-    const sentPdf = pdf;
+    const sentPdfs = pdfs;
     setImage(null);
-    setPdf(null);
-    setPdfName("");
+    setPdfs([]);
     setLoading(true);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (pdfInputRef.current) pdfInputRef.current.value = "";
@@ -111,13 +118,13 @@ export default function StudyCoach() {
         return { role: m.role, content: m.content };
       });
 
-      if (sentPdf) {
+      if (sentPdfs.length) {
         const last = apiMessages[apiMessages.length - 1];
         apiMessages[apiMessages.length - 1] = {
           role: last.role,
           content: [
-            { type: "document", source: { type: "base64", media_type: "application/pdf", data: sentPdf } },
-            { type: "text", text: userContent || "Leg de lesstof in dit PDF uit en geef een samenvatting van de belangrijkste punten." },
+            ...sentPdfs.map(p => ({ type: "document", source: { type: "base64", media_type: "application/pdf", data: p.data } })),
+            { type: "text", text: userContent || "Leg de lesstof in deze PDFs uit en geef een samenvatting van de belangrijkste punten." },
           ],
         };
       }
@@ -184,9 +191,9 @@ export default function StudyCoach() {
               {msg.image && (
                 <img src={`data:${msg.imageType};base64,${msg.image}`} alt="opgave" style={styles.uploadedImg} />
               )}
-              {msg.pdfName && (
-                <div style={styles.pdfBadge}>📄 {msg.pdfName}</div>
-              )}
+              {msg.pdfNames?.map((name, j) => (
+                <div key={j} style={styles.pdfBadge}>📄 {name}</div>
+              ))}
               <div>{fmt(msg.content)}</div>
             </div>
             {msg.role === "user" && <div style={styles.avatar}>🙋</div>}
@@ -206,7 +213,7 @@ export default function StudyCoach() {
       </main>
 
       <footer style={styles.footer}>
-        {(image || pdf) && (
+        {(image || pdfs.length > 0) && (
           <div style={styles.attachments}>
             {image && (
               <div style={styles.previewWrap}>
@@ -214,19 +221,19 @@ export default function StudyCoach() {
                 <button onClick={() => setImage(null)} style={styles.removeBtn}>✕</button>
               </div>
             )}
-            {pdf && (
-              <div style={styles.pdfPreview}>
-                <span>📄 {pdfName}</span>
-                <button onClick={() => { setPdf(null); setPdfName(""); }} style={styles.removeBtn2}>✕</button>
+            {pdfs.map((p, i) => (
+              <div key={i} style={styles.pdfPreview}>
+                <span>📄 {p.name}</span>
+                <button onClick={() => setPdfs(prev => prev.filter((_, j) => j !== i))} style={styles.removeBtn2}>✕</button>
               </div>
-            )}
+            ))}
           </div>
         )}
         <div style={styles.inputRow}>
           <button style={styles.iconBtn} onClick={() => fileInputRef.current?.click()} title="Foto">📷</button>
           <button style={styles.iconBtn} onClick={() => pdfInputRef.current?.click()} title="PDF">📄</button>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display: "none" }} />
-          <input ref={pdfInputRef} type="file" accept="application/pdf" onChange={handlePdfUpload} style={{ display: "none" }} />
+          <input ref={pdfInputRef} type="file" accept="application/pdf" multiple onChange={handlePdfUpload} style={{ display: "none" }} />
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -235,7 +242,7 @@ export default function StudyCoach() {
             rows={1}
             style={styles.textarea}
           />
-          <button onClick={sendMessage} disabled={loading || (!input.trim() && !image && !pdf)} style={{ ...styles.sendBtn, opacity: loading || (!input.trim() && !image && !pdf) ? 0.4 : 1 }}>
+          <button onClick={sendMessage} disabled={loading || (!input.trim() && !image && !pdfs.length)} style={{ ...styles.sendBtn, opacity: loading || (!input.trim() && !image && !pdfs.length) ? 0.4 : 1 }}>
             ➤
           </button>
         </div>
