@@ -7,11 +7,12 @@ interface Message {
   content: string;
   image?: string;
   imageType?: string;
+  pdfName?: string;
 }
 
 const SYSTEM_PROMPT = `Jij bent mijn persoonlijke wiskundedocent voor 3 vwo. Leg alles uit in korte, simpele stappen alsof ik het voor het eerst leer.
 Gebruik duidelijke voorbeelden en vermijd moeilijke woorden tenzij je ze uitlegt.
-Als ik een foto of opgave stuur:
+Als ik een foto, PDF of opgave stuur:
 Leg stap voor stap uit hoe je het oplost
 Vertel waarom je elke stap doet
 Geef daarna 1-3 korte oefenopgaven die erop lijken
@@ -24,15 +25,18 @@ export default function StudyCoach() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Hoi! 👋 Ik ben jouw persoonlijke wiskundedocent voor 3 vwo.\n\nStuur me een opgave, foto of vraag — dan helpen we je samen! 🎯\n\nWat wil je vandaag oefenen?",
+      content: "Hoi! 👋 Ik ben jouw persoonlijke wiskundedocent voor 3 vwo.\n\nStuur me een opgave, foto, PDF of vraag — dan helpen we je samen! 🎯\n\nWat wil je vandaag oefenen?",
     },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [image, setImage] = useState<string | null>(null);
   const [imageType, setImageType] = useState<string>("image/jpeg");
+  const [pdf, setPdf] = useState<string | null>(null);
+  const [pdfName, setPdfName] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -44,26 +48,49 @@ export default function StudyCoach() {
     setImageType(file.type);
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const result = ev.target?.result as string;
-      setImage(result.split(",")[1]);
+      setImage((ev.target?.result as string).split(",")[1]);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPdfName(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setPdf((ev.target?.result as string).split(",")[1]);
     };
     reader.readAsDataURL(file);
   };
 
   const sendMessage = async () => {
-    if (!input.trim() && !image) return;
+    if (!input.trim() && !image && !pdf) return;
+
+    let userContent = input;
+    if (!userContent && image) userContent = "📷 [Foto gestuurd — los deze opgave op]";
+    if (!userContent && pdf) userContent = `📄 [PDF gestuurd: ${pdfName}]`;
+
     const userMsg: Message = {
       role: "user",
-      content: input || "📷 [Foto gestuurd — los deze opgave op]",
+      content: userContent,
       image: image || undefined,
       imageType: image ? imageType : undefined,
+      pdfName: pdf ? pdfName : undefined,
     };
+
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
+    const sentImage = image;
+    const sentImageType = imageType;
+    const sentPdf = pdf;
     setImage(null);
+    setPdf(null);
+    setPdfName("");
     setLoading(true);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    if (pdfInputRef.current) pdfInputRef.current.value = "";
 
     try {
       const apiMessages = newMessages.map((m) => {
@@ -78,6 +105,17 @@ export default function StudyCoach() {
         }
         return { role: m.role, content: m.content };
       });
+
+      if (sentPdf) {
+        const last = apiMessages[apiMessages.length - 1];
+        apiMessages[apiMessages.length - 1] = {
+          role: last.role,
+          content: [
+            { type: "document", source: { type: "base64", media_type: "application/pdf", data: sentPdf } },
+            { type: "text", text: userContent || "Leg de lesstof in dit PDF uit en geef een samenvatting van de belangrijkste punten." },
+          ],
+        };
+      }
 
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -128,11 +166,10 @@ export default function StudyCoach() {
             {msg.role === "assistant" && <div style={styles.avatar}>🤖</div>}
             <div style={{ ...styles.bubble, ...(msg.role === "user" ? styles.bubbleUser : styles.bubbleBot) }}>
               {msg.image && (
-                <img
-                  src={`data:${msg.imageType};base64,${msg.image}`}
-                  alt="opgave"
-                  style={styles.uploadedImg}
-                />
+                <img src={`data:${msg.imageType};base64,${msg.image}`} alt="opgave" style={styles.uploadedImg} />
+              )}
+              {msg.pdfName && (
+                <div style={styles.pdfBadge}>📄 {msg.pdfName}</div>
               )}
               <div>{fmt(msg.content)}</div>
             </div>
@@ -153,15 +190,27 @@ export default function StudyCoach() {
       </main>
 
       <footer style={styles.footer}>
-        {image && (
-          <div style={styles.previewWrap}>
-            <img src={`data:${imageType};base64,${image}`} alt="preview" style={styles.preview} />
-            <button onClick={() => setImage(null)} style={styles.removeBtn}>✕</button>
+        {(image || pdf) && (
+          <div style={styles.attachments}>
+            {image && (
+              <div style={styles.previewWrap}>
+                <img src={`data:${imageType};base64,${image}`} alt="preview" style={styles.preview} />
+                <button onClick={() => setImage(null)} style={styles.removeBtn}>✕</button>
+              </div>
+            )}
+            {pdf && (
+              <div style={styles.pdfPreview}>
+                <span>📄 {pdfName}</span>
+                <button onClick={() => { setPdf(null); setPdfName(""); }} style={styles.removeBtn2}>✕</button>
+              </div>
+            )}
           </div>
         )}
         <div style={styles.inputRow}>
           <button style={styles.iconBtn} onClick={() => fileInputRef.current?.click()} title="Foto">📷</button>
+          <button style={styles.iconBtn} onClick={() => pdfInputRef.current?.click()} title="PDF">📄</button>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display: "none" }} />
+          <input ref={pdfInputRef} type="file" accept="application/pdf" onChange={handlePdfUpload} style={{ display: "none" }} />
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -170,11 +219,11 @@ export default function StudyCoach() {
             rows={1}
             style={styles.textarea}
           />
-          <button onClick={sendMessage} disabled={loading || (!input.trim() && !image)} style={{ ...styles.sendBtn, opacity: loading || (!input.trim() && !image) ? 0.4 : 1 }}>
+          <button onClick={sendMessage} disabled={loading || (!input.trim() && !image && !pdf)} style={{ ...styles.sendBtn, opacity: loading || (!input.trim() && !image && !pdf) ? 0.4 : 1 }}>
             ➤
           </button>
         </div>
-        <p style={styles.hint}>Enter om te sturen · Shift+Enter voor nieuwe regel</p>
+        <p style={styles.hint}>Enter om te sturen · 📷 foto · 📄 PDF met lesstof</p>
       </footer>
       <style>{`
         @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-7px)} }
@@ -205,10 +254,14 @@ const styles: Record<string, React.CSSProperties> = {
   typing: { display: "flex", gap: 5, alignItems: "center", padding: "14px 18px" },
   dot2: { width: 8, height: 8, background: "#94a3b8", borderRadius: "50%", animation: "bounce 1.2s infinite", display: "inline-block" },
   uploadedImg: { maxWidth: 200, borderRadius: 8, marginBottom: 8, display: "block" },
+  pdfBadge: { background: "rgba(255,255,255,0.2)", borderRadius: 8, padding: "4px 8px", fontSize: "0.8rem", marginBottom: 6, display: "inline-block" },
   footer: { background: "white", borderTop: "1px solid #e2e8f0", padding: "12px 16px 16px", position: "sticky", bottom: 0 },
-  previewWrap: { position: "relative", display: "inline-block", marginBottom: 8 },
+  attachments: { display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" as const },
+  previewWrap: { position: "relative", display: "inline-block" },
   preview: { height: 60, borderRadius: 8, border: "2px solid #e2e8f0" },
-  removeBtn: { position: "absolute", top: -6, right: -6, background: "#ef4444", color: "white", border: "none", borderRadius: "50%", width: 20, height: 20, fontSize: "0.6rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
+  pdfPreview: { display: "flex", alignItems: "center", gap: 6, background: "#f0f4ff", border: "2px solid #c7d2fe", borderRadius: 8, padding: "6px 10px", fontSize: "0.85rem", color: "#4f46e5", fontWeight: 500 },
+  removeBtn: { position: "absolute", top: -6, right: -6, background: "#ef4444", color: "white", border: "none", borderRadius: "50%", width: 20, height: 20, fontSize: "0.6rem", cursor: "pointer" },
+  removeBtn2: { background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "0.8rem", padding: 0, marginLeft: 4 },
   inputRow: { display: "flex", alignItems: "flex-end", gap: 8, background: "#f8fafc", border: "2px solid #e2e8f0", borderRadius: 24, padding: "6px 6px 6px 12px" },
   iconBtn: { fontSize: "1.3rem", background: "none", border: "none", cursor: "pointer", padding: 4, borderRadius: 8, flexShrink: 0 },
   textarea: { flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: "0.95rem", fontFamily: "inherit", color: "#1e293b", padding: "4px 0", maxHeight: 120 },
