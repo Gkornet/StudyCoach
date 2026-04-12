@@ -56,6 +56,11 @@ export default function StudyCoach() {
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      alert("PDF is te groot (max 3 MB). Comprimeer het bestand of gebruik een kleinere PDF.");
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+      return;
+    }
     setPdfName(file.name);
     const reader = new FileReader();
     reader.onload = (ev) => {
