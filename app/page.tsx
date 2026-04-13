@@ -78,6 +78,21 @@ Geef een kort genummerd spiekbriefje van alle begrippen.
 Stuur daarna exact dit (met de echte begrippen ingevuld):
 [sessie-klaar: begrip1 | begrip2 | begrip3]
 
+## Visuele uitleg met SVG-tekeningen
+Teken een SVG-diagram als dat het begrip verduidelijkt — vooral bij meetkunde (hoeken, lijnen, driehoeken, cirkels).
+Wikkel de SVG altijd in: [svg]<svg ...>...</svg>[/svg]
+
+Gebruik deze stijl:
+- viewBox="0 0 260 200" width="260" height="200"
+- Vlakken: fill="#e0e7ff" stroke="#4338ca" stroke-width="2"
+- Speciale lijn (bijv. deellijn): stroke="#ef4444" stroke-width="2" stroke-dasharray="5,3"
+- Tekst/labels: font-size="13" fill="#1e293b" font-family="sans-serif"
+- Hoekboogjes: <path d="M..." fill="none" stroke="#f59e0b" stroke-width="2"/>
+- Houd het simpel: één concept per tekening, duidelijke labels
+
+Voorbeeld voor een driehoek met deellijn:
+[svg]<svg viewBox="0 0 260 200" width="260" height="200" xmlns="http://www.w3.org/2000/svg"><polygon points="130,15 20,185 240,185" fill="#e0e7ff" stroke="#4338ca" stroke-width="2"/><line x1="130" y1="15" x2="130" y2="185" stroke="#ef4444" stroke-width="2" stroke-dasharray="5,3"/><text x="130" y="10" text-anchor="middle" font-size="13" fill="#1e293b" font-family="sans-serif">A</text><text x="12" y="195" font-size="13" fill="#1e293b" font-family="sans-serif">B</text><text x="242" y="195" font-size="13" fill="#1e293b" font-family="sans-serif">C</text><text x="138" y="105" font-size="12" fill="#ef4444" font-family="sans-serif">deellijn</text></svg>[/svg]
+
 ## Schrijfstijl
 - Korte zinnen. Geen formele taal. Geen LaTeX of dollartekens.
 - Formules gewoon uitschrijven: gemiddelde = totaal ÷ aantal
@@ -273,7 +288,10 @@ export default function StudyCoach() {
   const stripMarkers = (text: string) =>
     text.replace(/\[(keuzes|sessie|voortgang|sessie-klaar):[^\]]*\]/gi, "").trim();
 
-  const Markdown = ({ text }: { text: string }) => (
+  const sanitizeSvg = (svg: string) =>
+    svg.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/\son\w+="[^"]*"/gi, "");
+
+  const MdBlock = ({ text }: { text: string }) => (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
@@ -283,9 +301,23 @@ export default function StudyCoach() {
         p: (props) => <p style={{ margin: "4px 0" }} {...props} />,
       }}
     >
-      {stripMarkers(text)}
+      {text}
     </ReactMarkdown>
   );
+
+  const MessageContent = ({ text }: { text: string }) => {
+    const clean = stripMarkers(text);
+    const parts = clean.split(/\[svg\]([\s\S]*?)\[\/svg\]/gi);
+    return (
+      <>
+        {parts.map((part, i) =>
+          i % 2 === 1
+            ? <div key={i} style={styles.svgWrap} dangerouslySetInnerHTML={{ __html: sanitizeSvg(part) }} />
+            : <MdBlock key={i} text={part} />
+        )}
+      </>
+    );
+  };
 
   return (
     <div style={styles.wrapper}>
@@ -331,7 +363,7 @@ export default function StudyCoach() {
               {msg.pdfNames?.map((name, j) => (
                 <div key={j} style={styles.pdfBadge}>📄 {name}</div>
               ))}
-              <div><Markdown text={msg.content} /></div>
+              <div><MessageContent text={msg.content} /></div>
             </div>
             {msg.role === "user" && <div style={styles.avatar}>🙋</div>}
           </div>
@@ -502,6 +534,7 @@ const styles: Record<string, React.CSSProperties> = {
   endBtn: { background: "linear-gradient(135deg,#2563eb,#4f46e5)", color: "white", border: "none", borderRadius: 50, padding: "14px 32px", fontSize: "1rem", fontWeight: 700, cursor: "pointer", width: "100%" },
   choicesBar: { display: "flex", flexWrap: "wrap" as const, gap: 8, padding: "8px 16px", background: "white", borderTop: "1px solid #e2e8f0" },
   choiceBtn: { background: "#f0f4ff", border: "2px solid #c7d2fe", color: "#4338ca", borderRadius: 20, padding: "7px 16px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
+  svgWrap: { margin: "10px 0", lineHeight: 0 },
   mdTable: { borderCollapse: "collapse" as const, margin: "8px 0", fontSize: "0.9rem", width: "100%" },
   mdTh: { border: "1px solid #cbd5e1", padding: "6px 12px", background: "#f1f5f9", textAlign: "left" as const },
   mdTd: { border: "1px solid #cbd5e1", padding: "6px 12px" },
