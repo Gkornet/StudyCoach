@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface PdfFile {
   data: string;
@@ -17,24 +19,38 @@ interface Message {
 
 const SYSTEM_PROMPT = `Jij bent een heel geduldige wiskundedocent voor een leerling die veel moeite heeft met wiskunde. Leg alles uit zoals je het aan een jong kind zou uitleggen — supersimpel, heel duidelijk, stap voor stap.
 
-Zo doe je dat:
-- Gebruik heel korte zinnen. Geen moeilijke woorden. Als je toch een moeilijk woord moet gebruiken, leg het meteen uit.
-- Gebruik voorbeelden uit het echte leven: pizza's, geld, trappen, fietsen — iets wat ze kennen.
-- Maak elke stap apart en nummer ze: Stap 1, Stap 2, etc.
+**Als de leerling een PDF of foto stuurt, doe dan dit eerst:**
+Geef een korte samenvatting van wat er in de bijlage staat:
+- Welk onderwerp gaat het over?
+- Welke opgaven staan erin? (noem ze kort op)
+- Wat moeten we kunnen om dit te maken?
+Daarna: pak de eerste opgave en begin met uitleggen.
+
+**Zo leg je uit:**
+- Schrijf de opgave eerst letterlijk over, zodat het duidelijk is welke opdracht we doen.
+- Gebruik heel korte zinnen. Geen moeilijke woorden. Als je toch een moeilijk woord gebruikt, leg het meteen uit.
+- Gebruik voorbeelden uit het echte leven: pizza's, geld, trappen, fietsen.
+- Maak elke stap apart en nummer ze: **Stap 1**, **Stap 2**, etc.
 - Leg bij elke stap uit WAAROM je dat doet, niet alleen WAT.
-- Gebruik regelmatig ✅ als iets klopt en ❌ als iets fout gaat.
+- Gebruik ✅ als iets klopt en ❌ als iets fout gaat.
 
-Aan het einde van elke uitleg:
-- Geef 1 korte controlevraag die lijkt op wat je net uitlegde.
-- Wacht op het antwoord. Als het goed is: zeg waarom het goed is. Als het fout is: leg rustig uit waar het mis ging, zonder te oordelen.
+**Wiskunde schrijf je zo (geen ingewikkelde formulenotatie):**
+- Schrijf formules gewoon uit: gemiddelde = totaal ÷ aantal
+- Breuken schrijf je als: 30/20 = 1,5
+- Geen LaTeX of dollartekens gebruiken
 
-Stijl:
+**Na elke opgave:**
+- Stel 1 korte controlevraag die lijkt op wat je net uitlegde.
+- Wacht op het antwoord. Als het goed is: zeg waarom. Als het fout is: leg rustig uit waar het misging.
+
+**Als alle opgaven klaar zijn, sluit je af met:**
+## Wat hebben we vandaag geleerd? 🎓
+Geef een overzichtje van de begrippen en trucjes die we hebben geoefend. Kort en duidelijk, als een spiekbriefje.
+
+**Stijl:**
 - Schrijf zoals je praat. Geen formele taal.
-- Wees altijd bemoedigend. Wiskunde is moeilijk en dat is oké.
-- Gebruik emoji's om het wat vrolijker te maken 😊
-- Zet belangrijke dingen apart met: 🔑 Onthoud: ...
-
-Als de leerling een foto of PDF stuurt: los het op alsof je naast haar zit en het samen uitzoekt.`;
+- Wees altijd bemoedigend. Wiskunde is moeilijk en dat is oké. 😊
+- Zet belangrijke dingen apart met: 🔑 **Onthoud:** ...`;
 
 export default function StudyCoach() {
   const [messages, setMessages] = useState<Message[]>([
@@ -170,10 +186,19 @@ export default function StudyCoach() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
-  const fmt = (text: string) =>
-    text.split("\n").map((line, i, arr) => (
-      <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
-    ));
+  const Markdown = ({ text }: { text: string }) => (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        table: (props) => <table style={styles.mdTable} {...props} />,
+        th: (props) => <th style={styles.mdTh} {...props} />,
+        td: (props) => <td style={styles.mdTd} {...props} />,
+        p: (props) => <p style={{ margin: "4px 0" }} {...props} />,
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
 
   return (
     <div style={styles.wrapper}>
@@ -204,7 +229,7 @@ export default function StudyCoach() {
               {msg.pdfNames?.map((name, j) => (
                 <div key={j} style={styles.pdfBadge}>📄 {name}</div>
               ))}
-              <div>{fmt(msg.content)}</div>
+              <div><Markdown text={msg.content} /></div>
             </div>
             {msg.role === "user" && <div style={styles.avatar}>🙋</div>}
           </div>
@@ -300,4 +325,7 @@ const styles: Record<string, React.CSSProperties> = {
   textarea: { flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: "0.95rem", fontFamily: "inherit", color: "#1e293b", padding: "4px 0", maxHeight: 120 },
   sendBtn: { background: "linear-gradient(135deg,#2563eb,#4f46e5)", color: "white", border: "none", borderRadius: "50%", width: 40, height: 40, fontSize: "1rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   hint: { fontSize: "0.7rem", color: "#94a3b8", textAlign: "center", margin: "6px 0 0" },
+  mdTable: { borderCollapse: "collapse" as const, margin: "8px 0", fontSize: "0.9rem", width: "100%" },
+  mdTh: { border: "1px solid #cbd5e1", padding: "6px 12px", background: "#f1f5f9", textAlign: "left" as const },
+  mdTd: { border: "1px solid #cbd5e1", padding: "6px 12px" },
 };
