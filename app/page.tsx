@@ -172,8 +172,8 @@ export default function StudyCoach() {
 
   const sendChoice = (choice: string) => {
     setChoices([]);
-    setInput(choice);
-    setTimeout(() => sendMessageWith(choice), 0);
+    setInput("");
+    sendMessageWith(choice);
   };
 
   const sendMessage = async () => {
