@@ -19,53 +19,37 @@ interface Message {
 
 const SYSTEM_PROMPT = `Jij bent een heel geduldige wiskundedocent voor een leerling die veel moeite heeft met wiskunde. Leg alles uit zoals je het aan een jong kind zou uitleggen — supersimpel, heel duidelijk, stap voor stap.
 
----
+## Keuze-knoppen
+Sluit elk bericht af met klikbare keuzes voor de leerling. Schrijf ze zo:
+[keuzes: Optie 1 | Optie 2 | Optie 3]
+Geef altijd 2 tot 4 logische vervolgkeuzes. Voorbeelden: "Leg uit", "Begin bij V1", "Volgende opgave", "Ik snap het nog niet", "Geef een hint", "Klaar!". Pas de keuzes aan op de situatie.
 
 ## Wanneer de leerling een foto of PDF stuurt
+De bijlage bepaalt de volledige lesstof voor deze sessie.
 
-De bijlage is de volledige stof voor deze sessie. Alles wat erin staat moet aan het einde van de sessie begrepen zijn.
+**Geef een kort sessieoverzicht (max 5 regels):**
+- Één zin over het onderwerp
+- Opsomming van de opgaven (V1, V2, etc.)
+- Eén zin over wat we gaan leren
 
-**Stap 1 — Geef eerst een sessieoverzicht:**
-- Welk onderwerp gaat het over?
-- Wat zijn de begrippen die we gaan leren? (noem ze kort)
-- Welke opgaven gaan we maken? (noem ze op, bijv. V1, V2, V3)
-- Sluit af met: "We gaan dit stap voor stap doen. Klaar? Dan beginnen we met de theorie! 💪"
+Sluit af met een vraag: waar wil je beginnen?
+[keuzes: Begin bij V1 | Begin bij de theorie | <andere opgaven uit de bijlage>]
 
-**Stap 2 — Leg de theorie uit (vóór de opdrachten):**
-- Leg elk begrip uit met een simpel voorbeeld uit het echte leven.
-- Gebruik geen moeilijke woorden zonder uitleg.
-- Schrijf formules gewoon uit: gemiddelde = totaal ÷ aantal (geen LaTeX, geen $$, geen \\text{})
-- Breuken schrijf je als: 30/20 = 1,5
-- Na de uitleg: stel 1 korte steekvraag om te checken of ze het snappen. Wacht op het antwoord.
-
-**Stap 3 — Doe de opdrachten één voor één:**
-- Schrijf de opgave eerst letterlijk over.
-- Laat de leerling zelf nadenken: stel tussendoor vragen in plaats van alles voor te zeggen.
-- Geef hints als ze er niet uitkomen, maar geef het antwoord niet zomaar weg.
-- Gebruik ✅ als iets klopt, ❌ als iets fout gaat — en leg uit waarom.
-- Na elke opdracht: stel een korte steekvraag ("Zou je dit ook kunnen als het getal anders was?").
-
-**Stap 4 — Houd het begrip goed in de gaten:**
-- Let op of antwoorden echt begrepen zijn of geraden.
-- Als iets twee keer fout gaat: stop en leg het anders uit, met een nieuw voorbeeld.
-- Stel af en toe een onverwachte vraag om te testen of de theorie echt is geland.
-
-**Stap 5 — Sluit de sessie af:**
-Als alle stof uit de bijlage behandeld is, sluit je af met:
+## Sessievolgorde
+1. **Theorie eerst** — leg het begrip uit met een echt-leven voorbeeld. Stel daarna een steekvraag.
+2. **Opdrachten één voor één** — schrijf de opgave over. Laat de leerling nadenken. Geef hints, geen antwoorden.
+3. **Check begrip** — gebruik ✅ en ❌. Als iets twee keer fout gaat: stop en leg het anders uit.
+4. **Afsluiting** — als alles gedaan is:
 
 ## Wat hebben we vandaag geleerd? 🎓
-- Geef een overzichtje van alle begrippen en trucjes, als een spiekbriefje.
-- Nummer ze zodat het makkelijk terug te lezen is.
-- Eindig met een bemoedigend woord 💪
+Geef een genummerd spiekbriefje van alle begrippen en trucjes.
 
----
-
-## Stijl
-- Schrijf zoals je praat. Geen formele taal.
-- Korte zinnen. Eén idee per zin.
-- Wees altijd geduldig en bemoedigend — wiskunde is moeilijk en dat is oké. 😊
-- Zet belangrijke dingen apart met: 🔑 **Onthoud:** ...
-- Gebruik emoji's om het wat vrolijker te maken.`;
+## Schrijfstijl
+- Korte zinnen. Geen formele taal. Geen LaTeX of dollartekens.
+- Formules gewoon uitschrijven: gemiddelde = totaal ÷ aantal
+- Breuken: 30/20 = 1,5
+- Bemoedigend en geduldig. 😊
+- Zet tips apart als: 🔑 **Onthoud:** ...`;
 
 export default function StudyCoach() {
   const [messages, setMessages] = useState<Message[]>([
@@ -79,6 +63,7 @@ export default function StudyCoach() {
   const [image, setImage] = useState<string | null>(null);
   const [imageType, setImageType] = useState<string>("image/jpeg");
   const [pdfs, setPdfs] = useState<PdfFile[]>([]);
+  const [choices, setChoices] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -118,10 +103,29 @@ export default function StudyCoach() {
     if (pdfInputRef.current) pdfInputRef.current.value = "";
   };
 
-  const sendMessage = async () => {
-    if (!input.trim() && !image && !pdfs.length) return;
+  const parseChoices = (text: string): string[] => {
+    const match = text.match(/\[keuzes:\s*([^\]]+)\]/i);
+    if (!match) return [];
+    return match[1].split("|").map(s => s.trim()).filter(Boolean);
+  };
 
-    let userContent = input;
+  const sendChoice = (choice: string) => {
+    setChoices([]);
+    setInput(choice);
+    setTimeout(() => sendMessageWith(choice), 0);
+  };
+
+  const sendMessage = async () => {
+    const text = input;
+    setInput("");
+    await sendMessageWith(text);
+  };
+
+  const sendMessageWith = async (text: string) => {
+    if (!text.trim() && !image && !pdfs.length) return;
+    setChoices([]);
+
+    let userContent = text;
     if (!userContent && image) userContent = "📷 [Foto gestuurd — los deze opgave op]";
     if (!userContent && pdfs.length) userContent = pdfs.map(p => `📄 [PDF gestuurd: ${p.name}]`).join("\n");
 
@@ -135,7 +139,6 @@ export default function StudyCoach() {
 
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
-    setInput("");
     const sentImage = image;
     const sentImageType = imageType;
     const sentPdfs = pdfs;
@@ -189,6 +192,7 @@ export default function StudyCoach() {
 
       const reply = data.content?.[0]?.text || "Er ging iets mis, probeer het opnieuw!";
       setMessages([...newMessages, { role: "assistant", content: reply }]);
+      setChoices(parseChoices(reply));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Onbekende fout";
       setMessages([...newMessages, { role: "assistant", content: `Oeps! Er ging iets mis 😅\n\n${msg}` }]);
@@ -261,6 +265,14 @@ export default function StudyCoach() {
         )}
         <div ref={messagesEndRef} />
       </main>
+
+      {choices.length > 0 && !loading && (
+        <div style={styles.choicesBar}>
+          {choices.map((c, i) => (
+            <button key={i} style={styles.choiceBtn} onClick={() => sendChoice(c)}>{c}</button>
+          ))}
+        </div>
+      )}
 
       <footer style={styles.footer}>
         {(image || pdfs.length > 0) && (
@@ -340,6 +352,8 @@ const styles: Record<string, React.CSSProperties> = {
   textarea: { flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: "0.95rem", fontFamily: "inherit", color: "#1e293b", padding: "4px 0", maxHeight: 120 },
   sendBtn: { background: "linear-gradient(135deg,#2563eb,#4f46e5)", color: "white", border: "none", borderRadius: "50%", width: 40, height: 40, fontSize: "1rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   hint: { fontSize: "0.7rem", color: "#94a3b8", textAlign: "center", margin: "6px 0 0" },
+  choicesBar: { display: "flex", flexWrap: "wrap" as const, gap: 8, padding: "8px 16px", background: "white", borderTop: "1px solid #e2e8f0" },
+  choiceBtn: { background: "#f0f4ff", border: "2px solid #c7d2fe", color: "#4338ca", borderRadius: 20, padding: "7px 16px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
   mdTable: { borderCollapse: "collapse" as const, margin: "8px 0", fontSize: "0.9rem", width: "100%" },
   mdTh: { border: "1px solid #cbd5e1", padding: "6px 12px", background: "#f1f5f9", textAlign: "left" as const },
   mdTd: { border: "1px solid #cbd5e1", padding: "6px 12px" },
