@@ -19,21 +19,30 @@ interface Message {
 
 const SYSTEM_PROMPT = `Jij bent een heel geduldige wiskundedocent voor een leerling die veel moeite heeft met wiskunde. Leg alles uit zoals je het aan een jong kind zou uitleggen — supersimpel, heel duidelijk, stap voor stap.
 
-## Keuze-knoppen
-Sluit elk bericht af met klikbare keuzes voor de leerling. Schrijf ze zo:
+## Speciale markers — gebruik deze exact zo
+Sluit elk bericht af met:
 [keuzes: Optie 1 | Optie 2 | Optie 3]
-Geef altijd 2 tot 4 logische vervolgkeuzes. Voorbeelden: "Leg uit", "Begin bij V1", "Volgende opgave", "Ik snap het nog niet", "Geef een hint", "Klaar!". Pas de keuzes aan op de situatie.
+Geef 2 tot 4 logische vervolgkeuzes passend bij de situatie.
+
+Wanneer je de bijlage voor het eerst verwerkt, stuur ook dit (één keer):
+[sessie: N stappen | ~X min]
+Waarbij N = het totaal aantal stappen (theorie + opgaven) en X = geschatte minuten (reken ~4 min per stap).
+
+Elke keer dat een stap is afgerond (theorie begrepen of opgave klaar), stuur:
+[voortgang: N]
+Waarbij N het aantal voltooide stappen is (oplopend: 1, 2, 3...).
 
 ## Wanneer de leerling een foto of PDF stuurt
 De bijlage bepaalt de volledige lesstof voor deze sessie.
 
 **Geef een kort sessieoverzicht (max 5 regels):**
 - Één zin over het onderwerp
-- Opsomming van de opgaven (V1, V2, etc.)
-- Eén zin over wat we gaan leren
+- Opsomming van de stappen: eerst theorie, dan de opgaven (V1, V2, etc.)
+- Tijdsinschatting: "Dit duurt ongeveer X minuten."
 
 Sluit af met een vraag: waar wil je beginnen?
-[keuzes: Begin bij V1 | Begin bij de theorie | <andere opgaven uit de bijlage>]
+[sessie: N stappen | ~X min]
+[keuzes: Begin bij de theorie | Begin bij V1 | <andere opgaven>]
 
 ## Sessievolgorde
 1. **Theorie eerst** — leg het begrip uit met een echt-leven voorbeeld. Stel daarna een steekvraag.
@@ -64,6 +73,10 @@ export default function StudyCoach() {
   const [imageType, setImageType] = useState<string>("image/jpeg");
   const [pdfs, setPdfs] = useState<PdfFile[]>([]);
   const [choices, setChoices] = useState<string[]>([]);
+  const [sessionTotal, setSessionTotal] = useState(0);
+  const [sessionDone, setSessionDone] = useState(0);
+  const [sessionMinutes, setSessionMinutes] = useState(0);
+  const [celebrate, setCelebrate] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -107,6 +120,23 @@ export default function StudyCoach() {
     const match = text.match(/\[keuzes:\s*([^\]]+)\]/i);
     if (!match) return [];
     return match[1].split("|").map(s => s.trim()).filter(Boolean);
+  };
+
+  const parseMeta = (text: string) => {
+    const sessie = text.match(/\[sessie:\s*(\d+)\s*stappen?\s*\|\s*~?(\d+)\s*min\]/i);
+    if (sessie) {
+      setSessionTotal(parseInt(sessie[1]));
+      setSessionMinutes(parseInt(sessie[2]));
+      setSessionDone(0);
+    }
+    const voortgang = text.match(/\[voortgang:\s*(\d+)\]/i);
+    if (voortgang) {
+      const n = parseInt(voortgang[1]);
+      setSessionDone(prev => {
+        if (n > prev) { setCelebrate(true); setTimeout(() => setCelebrate(false), 1200); }
+        return n;
+      });
+    }
   };
 
   const sendChoice = (choice: string) => {
@@ -193,6 +223,7 @@ export default function StudyCoach() {
       const reply = data.content?.[0]?.text || "Er ging iets mis, probeer het opnieuw!";
       setMessages([...newMessages, { role: "assistant", content: reply }]);
       setChoices(parseChoices(reply));
+      parseMeta(reply);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Onbekende fout";
       setMessages([...newMessages, { role: "assistant", content: `Oeps! Er ging iets mis 😅\n\n${msg}` }]);
@@ -205,6 +236,9 @@ export default function StudyCoach() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
+  const stripMarkers = (text: string) =>
+    text.replace(/\[(keuzes|sessie|voortgang):[^\]]*\]/gi, "").trim();
+
   const Markdown = ({ text }: { text: string }) => (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -215,7 +249,7 @@ export default function StudyCoach() {
         p: (props) => <p style={{ margin: "4px 0" }} {...props} />,
       }}
     >
-      {text}
+      {stripMarkers(text)}
     </ReactMarkdown>
   );
 
@@ -230,10 +264,25 @@ export default function StudyCoach() {
               <div style={styles.logoSub}>Wiskunde · 3 VWO</div>
             </div>
           </div>
-          <div style={styles.badge}>
-            <span style={styles.dot} />
-            Online
-          </div>
+          {sessionTotal > 0 ? (
+            <div style={styles.progressWrap}>
+              <div style={styles.progressInfo}>
+                <span style={{ ...styles.progressLabel, animation: celebrate ? "pop 0.6s ease" : "none" }}>
+                  {celebrate ? "⭐" : `Stap ${sessionDone}/${sessionTotal}`}
+                </span>
+                <span style={styles.progressTime}>
+                  {sessionDone < sessionTotal
+                    ? `~${Math.round((sessionTotal - sessionDone) * (sessionMinutes / sessionTotal))} min`
+                    : "🎉 Klaar!"}
+                </span>
+              </div>
+              <div style={styles.progressTrack}>
+                <div style={{ ...styles.progressFill, width: `${Math.round((sessionDone / sessionTotal) * 100)}%` }} />
+              </div>
+            </div>
+          ) : (
+            <div style={styles.badge}><span style={styles.dot} />Online</div>
+          )}
         </div>
       </header>
 
@@ -312,6 +361,7 @@ export default function StudyCoach() {
       </footer>
       <style>{`
         @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-7px)} }
+        @keyframes pop { 0%{transform:scale(1)} 40%{transform:scale(1.5)} 100%{transform:scale(1)} }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
         body { margin: 0; background: #f0f4ff; }
       `}</style>
@@ -352,6 +402,12 @@ const styles: Record<string, React.CSSProperties> = {
   textarea: { flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: "0.95rem", fontFamily: "inherit", color: "#1e293b", padding: "4px 0", maxHeight: 120 },
   sendBtn: { background: "linear-gradient(135deg,#2563eb,#4f46e5)", color: "white", border: "none", borderRadius: "50%", width: 40, height: 40, fontSize: "1rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   hint: { fontSize: "0.7rem", color: "#94a3b8", textAlign: "center", margin: "6px 0 0" },
+  progressWrap: { display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4, minWidth: 140 },
+  progressInfo: { display: "flex", justifyContent: "space-between", width: "100%", fontSize: "0.75rem", color: "rgba(255,255,255,0.9)", fontWeight: 600 },
+  progressLabel: { transition: "all 0.3s" },
+  progressTime: {},
+  progressTrack: { width: "100%", height: 6, background: "rgba(255,255,255,0.25)", borderRadius: 6, overflow: "hidden" },
+  progressFill: { height: "100%", background: "#4ade80", borderRadius: 6, transition: "width 0.6s cubic-bezier(.4,0,.2,1)" },
   choicesBar: { display: "flex", flexWrap: "wrap" as const, gap: 8, padding: "8px 16px", background: "white", borderTop: "1px solid #e2e8f0" },
   choiceBtn: { background: "#f0f4ff", border: "2px solid #c7d2fe", color: "#4338ca", borderRadius: 20, padding: "7px 16px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
   mdTable: { borderCollapse: "collapse" as const, margin: "8px 0", fontSize: "0.9rem", width: "100%" },
