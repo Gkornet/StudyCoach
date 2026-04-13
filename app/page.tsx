@@ -48,10 +48,8 @@ Sluit af met een vraag: waar wil je beginnen?
 1. **Theorie eerst** — leg het begrip uit met een echt-leven voorbeeld. Stel daarna een steekvraag.
 2. **Opdrachten één voor één** — schrijf de opgave over. Laat de leerling nadenken. Geef hints, geen antwoorden.
 3. **Check begrip** — gebruik ✅ en ❌. Als iets twee keer fout gaat: stop en leg het anders uit.
-4. **Afsluiting** — als alles gedaan is:
-
-## Wat hebben we vandaag geleerd? 🎓
-Geef een genummerd spiekbriefje van alle begrippen en trucjes.
+4. **Afsluiting** — als alles gedaan is: geef een kort genummerd spiekbriefje van alle begrippen. Stuur daarna exact dit (met de echte begrippen ingevuld):
+[sessie-klaar: begrip1 | begrip2 | begrip3]
 
 ## Schrijfstijl
 - Korte zinnen. Geen formele taal. Geen LaTeX of dollartekens.
@@ -77,6 +75,9 @@ export default function StudyCoach() {
   const [sessionDone, setSessionDone] = useState(0);
   const [sessionMinutes, setSessionMinutes] = useState(0);
   const [celebrate, setCelebrate] = useState(false);
+  const [sessionComplete, setSessionComplete] = useState(false);
+  const [sessionConcepts, setSessionConcepts] = useState<string[]>([]);
+  const [sessionStartTime] = useState(() => Date.now());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -136,6 +137,12 @@ export default function StudyCoach() {
         if (n > prev) { setCelebrate(true); setTimeout(() => setCelebrate(false), 1200); }
         return n;
       });
+    }
+    const klaar = text.match(/\[sessie-klaar:\s*([^\]]+)\]/i);
+    if (klaar) {
+      const concepts = klaar[1].split("|").map(s => s.trim()).filter(Boolean);
+      setSessionConcepts(concepts);
+      setTimeout(() => setSessionComplete(true), 600);
     }
   };
 
@@ -237,7 +244,7 @@ export default function StudyCoach() {
   };
 
   const stripMarkers = (text: string) =>
-    text.replace(/\[(keuzes|sessie|voortgang):[^\]]*\]/gi, "").trim();
+    text.replace(/\[(keuzes|sessie|voortgang|sessie-klaar):[^\]]*\]/gi, "").trim();
 
   const Markdown = ({ text }: { text: string }) => (
     <ReactMarkdown
@@ -363,8 +370,55 @@ export default function StudyCoach() {
         @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-7px)} }
         @keyframes pop { 0%{transform:scale(1)} 40%{transform:scale(1.5)} 100%{transform:scale(1)} }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        @keyframes slideUp { from{opacity:0;transform:translateY(40px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         body { margin: 0; background: #f0f4ff; }
+        .choiceBtn:hover { background: #e0e7ff !important; transform: translateY(-1px); transition: all 0.15s; }
       `}</style>
+
+      {sessionComplete && (
+        <div style={styles.overlay}>
+          <div style={styles.endCard}>
+            <div style={styles.endTrophy}>🏆</div>
+            <div style={styles.endTitle}>Sessie voltooid!</div>
+            <div style={styles.endSub}>
+              {sessionTotal} stappen · {Math.round((Date.now() - sessionStartTime) / 60000)} minuten
+            </div>
+
+            {sessionConcepts.length > 0 && (
+              <div style={styles.endSection}>
+                <div style={styles.endSectionTitle}>Dit snap je nu 🎓</div>
+                <div style={styles.conceptsWrap}>
+                  {sessionConcepts.map((c, i) => (
+                    <span key={i} style={styles.conceptChip}>{c}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={styles.endMessage}>
+              Super gedaan! Je hebt hard gewerkt en nieuwe dingen geleerd. Succes bij de toets — je kan dit! 💪
+            </div>
+
+            <button
+              style={styles.endBtn}
+              onClick={() => {
+                setSessionComplete(false);
+                setSessionTotal(0);
+                setSessionDone(0);
+                setSessionConcepts([]);
+                setMessages([{
+                  role: "assistant",
+                  content: "Hoi! 👋 Ik ben jouw wiskundehulp.\n\nWiskunde kan best lastig zijn — maar we doen het gewoon samen, stap voor stap. Geen haast. Geen stomme vragen. 😊\n\n📸 **Zo beginnen we:**\nFotografeer of scan **alle stof** die je moet leren — de theorie, de voorbeelden én de opdrachten uit je boek. Stuur alles in één keer op.\n\nDan weet ik precies wat we deze sessie gaan leren en kunnen we er samen doorheen!",
+                }]);
+                setChoices([]);
+              }}
+            >
+              Nieuwe sessie starten →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -408,6 +462,17 @@ const styles: Record<string, React.CSSProperties> = {
   progressTime: {},
   progressTrack: { width: "100%", height: 6, background: "rgba(255,255,255,0.25)", borderRadius: 6, overflow: "hidden" },
   progressFill: { height: "100%", background: "#4ade80", borderRadius: 6, transition: "width 0.6s cubic-bezier(.4,0,.2,1)" },
+  overlay: { position: "fixed" as const, inset: 0, background: "rgba(15,23,42,0.85)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
+  endCard: { background: "white", borderRadius: 28, padding: "40px 32px", maxWidth: 420, width: "100%", textAlign: "center" as const, animation: "slideUp 0.5s cubic-bezier(.4,0,.2,1)", boxShadow: "0 24px 64px rgba(0,0,0,0.25)" },
+  endTrophy: { fontSize: "4rem", marginBottom: 12, display: "block", animation: "pop 0.6s 0.3s both" },
+  endTitle: { fontSize: "1.7rem", fontWeight: 800, color: "#1e293b", marginBottom: 4 },
+  endSub: { fontSize: "0.9rem", color: "#94a3b8", marginBottom: 28 },
+  endSection: { background: "#f8fafc", borderRadius: 16, padding: "16px 20px", marginBottom: 20, textAlign: "left" as const },
+  endSectionTitle: { fontSize: "0.8rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase" as const, letterSpacing: 0.5, marginBottom: 10 },
+  conceptsWrap: { display: "flex", flexWrap: "wrap" as const, gap: 8 },
+  conceptChip: { background: "#e0e7ff", color: "#4338ca", borderRadius: 20, padding: "5px 14px", fontSize: "0.85rem", fontWeight: 600 },
+  endMessage: { fontSize: "0.95rem", color: "#475569", lineHeight: 1.6, marginBottom: 28 },
+  endBtn: { background: "linear-gradient(135deg,#2563eb,#4f46e5)", color: "white", border: "none", borderRadius: 50, padding: "14px 32px", fontSize: "1rem", fontWeight: 700, cursor: "pointer", width: "100%" },
   choicesBar: { display: "flex", flexWrap: "wrap" as const, gap: 8, padding: "8px 16px", background: "white", borderTop: "1px solid #e2e8f0" },
   choiceBtn: { background: "#f0f4ff", border: "2px solid #c7d2fe", color: "#4338ca", borderRadius: 20, padding: "7px 16px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
   mdTable: { borderCollapse: "collapse" as const, margin: "8px 0", fontSize: "0.9rem", width: "100%" },
