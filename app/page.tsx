@@ -28,18 +28,22 @@ De leerstof = élk begrip, élke term, definitie, regel, formule of jaartal dat 
 [vak: Naam] — één keer bij eerste bijlage (bijv. Wiskunde, Frans, Economie)
 [aanpak: korte naam] — één keer, nadat de leerling in stap 2 koos hoe hij het liefst leert (bijv. "als verhaal", "stap voor stap", "met ezelsbruggetjes")
 [sessie: N stappen] — één keer bij eerste bijlage
+[begrippen: begrip1 | begrip2 | ...] — in stap 1, én opnieuw na elke toevoeging: de volledige leerlijst. De app toont dit als controlekaart met een "klopt"-knop en een veld om een gemist begrip toe te voegen.
 [voortgang: N] — VERPLICHT ná élk afgerond begrip. N = aantal afgeronde begrippen, steeds precies +1. Nooit overslaan.
 [sessie-klaar: begrip1 | begrip2] — als alles klaar is
 
 ## Sessievolgorde — volg dit strak
 
-### Stap 1: Micro-instap (bij eerste bijlage)
-Lees ALLE bijlagen eerst volledig en grondig, van begin tot eind, regel voor regel. Maak voor jezelf (niet zichtbaar voor de leerling) de leerlijst: zet er élk begrip, élke term, definitie, regel, formule en jaartal op dat wordt uitgelegd of benadrukt. Loop de stof echt systematisch na zodat je niets mist — niet alleen de vetgedrukte woorden en kopjes, maar óók begrippen die gewoon in de lopende tekst worden uitgelegd. Bij twijfel of iets leerstof is: opnemen, niet overslaan. Laat alleen echte bijzaken weg (anekdotes, inleidende praatjes, losse weetjes). Tel de begrippen op je leerlijst — dat aantal is je [sessie: N stappen]. Wees liever iets te compleet dan te kort. Stuur dan alleen dit:
+### Stap 1: Begrippencheck (bij eerste bijlage)
+Lees ALLE bijlagen eerst volledig en grondig, van begin tot eind, regel voor regel. Maak de leerlijst: zet er élk begrip, élke term, definitie, regel, formule en jaartal op dat wordt uitgelegd of benadrukt. Loop de stof echt systematisch na zodat je niets mist — niet alleen de vetgedrukte woorden en kopjes, maar óók begrippen die gewoon in de lopende tekst worden uitgelegd. Bij twijfel of iets leerstof is: opnemen, niet overslaan. Laat alleen echte bijzaken weg (anekdotes, inleidende praatjes, losse weetjes). Tel de begrippen — dat aantal is je [sessie: N stappen]. Wees liever iets te compleet dan te kort.
+Laat de leerling de lijst nu eerst controleren, zodat we zeker weten dat er niets mist. Stuur:
 - Één zin: wat is het onderwerp?
-- "We gaan dit stap voor stap doen. Jij bepaalt het tempo. Klaar om te beginnen?"
-- Noem GEEN lijst van stappen of begrippen. Dat komt later vanzelf.
-[vak:...] [sessie: N stappen]
-[keuzes: Ja, let's go! 💪 | Vertel eerst meer | Ik ben er niet zo zeker van]
+- "Dit zijn alle begrippen die ik in de stof vind. Klopt dit, of mist er nog iets?"
+- De volledige leerlijst als marker. Schrijf de begrippen NIET óók als gewone tekst — de kaart toont ze al.
+[vak:...] [sessie: N stappen] [begrippen: begrip1 | begrip2 | begrip3 | ...]
+Géén [keuzes:] in dit bericht — de begrippenkaart heeft een eigen "klopt"-knop en een veld om een gemist begrip toe te voegen.
+
+Voegt de leerling een gemist begrip toe? Zoek het meteen op in de bijgevoegde stof. Vind je het: voeg het op de juiste plek toe (volgorde van de tekst). Vind je het echt niet: zeg dat eerlijk en vraag waar het ongeveer staat. Stuur daarna de VOLLEDIGE bijgewerkte lijst opnieuw met [begrippen: ...] én een nieuwe [sessie: N stappen]. Pas wanneer de leerling bevestigt dat de lijst klopt, ga je door naar stap 2.
 
 ### Stap 2: Hoe leer jij het best? (één keer, zodra de leerling wil beginnen)
 Veel kinderen kennen het woord "leerstijl" niet, maar weten wél hoe iets bij hén blijft hangen. Vraag daarom kort en in gewone taal: "Voordat we beginnen — hoe pak jij [vak] het liefst aan?"
@@ -128,6 +132,7 @@ interface SavedSession {
   sessionConcepts: string[];
   sessionStartTime: number;
   choices: string[];
+  begrippen: string[];
   savedAt: number;
 }
 
@@ -193,6 +198,8 @@ export default function StudyCoach() {
   const [imageType, setImageType] = useState<string>("image/jpeg");
   const [pdfs, setPdfs] = useState<PdfFile[]>([]);
   const [choices, setChoices] = useState<string[]>([]);
+  const [begrippen, setBegrippen] = useState<string[]>([]);
+  const [missingBegrip, setMissingBegrip] = useState("");
   const [sessionTotal, setSessionTotal] = useState(0);
   const [sessionDone, setSessionDone] = useState(0);
   const [sessionMinutes, setSessionMinutes] = useState(0);
@@ -227,6 +234,7 @@ export default function StudyCoach() {
         setSessionConcepts(saved.sessionConcepts || []);
         if (saved.sessionStartTime) setSessionStartTime(saved.sessionStartTime);
         setChoices(saved.choices || []);
+        setBegrippen(saved.begrippen || []);
         setRestored(true);
       })
       .catch(() => {})
@@ -240,9 +248,9 @@ export default function StudyCoach() {
     if (!loaded || messages.length <= 1) return;
     idbSet({
       messages, sessionTotal, sessionDone, sessionMinutes, vak, aanpak,
-      sessionConcepts, sessionStartTime, choices, savedAt: Date.now(),
+      sessionConcepts, sessionStartTime, choices, begrippen, savedAt: Date.now(),
     }).catch(() => {});
-  }, [loaded, messages, sessionTotal, sessionDone, sessionMinutes, vak, aanpak, sessionConcepts, sessionStartTime, choices]);
+  }, [loaded, messages, sessionTotal, sessionDone, sessionMinutes, vak, aanpak, sessionConcepts, sessionStartTime, choices, begrippen]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -302,6 +310,11 @@ export default function StudyCoach() {
     const aanpakMatch = text.match(/\[aanpak:\s*([^\]]+)\]/i);
     if (aanpakMatch) setAanpak(aanpakMatch[1].trim());
 
+    const begrippenMatch = text.match(/\[begrippen:\s*([^\]]+)\]/i);
+    if (begrippenMatch) {
+      setBegrippen(begrippenMatch[1].split("|").map(s => s.trim()).filter(Boolean));
+    }
+
     const klaar = text.match(/\[sessie-klaar:\s*([^\]]+)\]/i);
     if (klaar) {
       const concepts = klaar[1].split("|").map(s => s.trim()).filter(Boolean);
@@ -316,6 +329,16 @@ export default function StudyCoach() {
     sendMessageWith(choice);
   };
 
+  const confirmBegrippen = () =>
+    sendMessageWith("De begrippenlijst klopt helemaal. Laten we beginnen! 💪");
+
+  const addMissingBegrip = () => {
+    const term = missingBegrip.trim();
+    if (!term) return;
+    setMissingBegrip("");
+    sendMessageWith(`Er mist nog een begrip in de lijst: "${term}". Zoek het op in de stof en voeg het toe; stuur daarna de volledige bijgewerkte begrippenlijst opnieuw zodat ik kan controleren.`);
+  };
+
   const sendMessage = async () => {
     const text = input;
     setInput("");
@@ -325,6 +348,7 @@ export default function StudyCoach() {
   const sendMessageWith = async (text: string) => {
     if (!text.trim() && !image && !pdfs.length) return;
     setChoices([]);
+    setBegrippen([]);
     setRestored(false);
 
     let userContent = text;
@@ -418,6 +442,8 @@ export default function StudyCoach() {
     setVak(null);
     setAanpak(null);
     setChoices([]);
+    setBegrippen([]);
+    setMissingBegrip("");
     setRestored(false);
     setSessionStartTime(Date.now());
     setMessages([{ role: "assistant", content: WELCOME_MESSAGE }]);
@@ -428,7 +454,7 @@ export default function StudyCoach() {
   };
 
   const stripMarkers = (text: string) =>
-    text.replace(/\[(keuzes|sessie|voortgang|sessie-klaar|vak|aanpak):[^\]]*\]/gi, "").trim();
+    text.replace(/\[(keuzes|sessie|voortgang|sessie-klaar|vak|aanpak|begrippen):[^\]]*\]/gi, "").trim();
 
   const sanitizeSvg = (svg: string) =>
     svg.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/\son\w+="[^"]*"/gi, "");
@@ -532,6 +558,32 @@ export default function StudyCoach() {
         )}
         <div ref={messagesEndRef} />
       </main>
+
+      {begrippen.length > 0 && !loading && (
+        <div style={styles.begrippenCard}>
+          <div style={styles.begrippenTitle}>📋 Dit ga ik je leren — klopt deze lijst?</div>
+          <div style={styles.begrippenList}>
+            {begrippen.map((b, i) => (
+              <span key={i} style={styles.begripChip}>{b}</span>
+            ))}
+          </div>
+          <button style={styles.begrippenConfirm} onClick={confirmBegrippen}>
+            ✅ Ja, dit klopt — beginnen!
+          </button>
+          <div style={styles.begrippenAddRow}>
+            <input
+              value={missingBegrip}
+              onChange={(e) => setMissingBegrip(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addMissingBegrip(); } }}
+              placeholder="Mist er een begrip? Typ het hier…"
+              style={styles.begrippenInput}
+            />
+            <button style={styles.begrippenAddBtn} onClick={addMissingBegrip} disabled={!missingBegrip.trim()}>
+              + Toevoegen
+            </button>
+          </div>
+        </div>
+      )}
 
       {choices.length > 0 && !loading && (
         <div style={styles.choicesBar}>
@@ -672,6 +724,14 @@ const styles: Record<string, React.CSSProperties> = {
   endMessage: { fontSize: "0.95rem", color: "#475569", lineHeight: 1.6, marginBottom: 28 },
   endBtn: { background: "linear-gradient(135deg,#2563eb,#4f46e5)", color: "white", border: "none", borderRadius: 50, padding: "14px 32px", fontSize: "1rem", fontWeight: 700, cursor: "pointer", width: "100%" },
   choicesBar: { display: "flex", flexWrap: "wrap" as const, gap: 8, padding: "8px 16px", background: "white", borderTop: "1px solid #e2e8f0" },
+  begrippenCard: { display: "flex", flexDirection: "column" as const, gap: 10, padding: "14px 16px", background: "white", borderTop: "1px solid #e2e8f0" },
+  begrippenTitle: { fontSize: "0.9rem", fontWeight: 700, color: "#1e293b" },
+  begrippenList: { display: "flex", flexWrap: "wrap" as const, gap: 6, maxHeight: 168, overflowY: "auto" as const },
+  begripChip: { background: "#eef2ff", color: "#4338ca", border: "1px solid #c7d2fe", borderRadius: 14, padding: "4px 10px", fontSize: "0.82rem", fontWeight: 600 },
+  begrippenConfirm: { background: "linear-gradient(135deg,#16a34a,#22c55e)", color: "white", border: "none", borderRadius: 14, padding: "11px 16px", fontSize: "0.95rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
+  begrippenAddRow: { display: "flex", gap: 8, alignItems: "center" },
+  begrippenInput: { flex: 1, background: "#f8fafc", border: "2px solid #e2e8f0", borderRadius: 12, padding: "9px 12px", fontSize: "0.9rem", fontFamily: "inherit", color: "#1e293b", outline: "none" },
+  begrippenAddBtn: { background: "#eef2ff", border: "2px solid #c7d2fe", color: "#4338ca", borderRadius: 12, padding: "9px 14px", fontSize: "0.85rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 },
   choiceBtn: { background: "#f0f4ff", border: "2px solid #c7d2fe", color: "#4338ca", borderRadius: 20, padding: "7px 16px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
   resumeBar: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" as const, background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46", borderRadius: 14, padding: "10px 14px", fontSize: "0.85rem", fontWeight: 500 },
   resumeBtn: { background: "white", border: "1px solid #6ee7b7", color: "#047857", borderRadius: 20, padding: "5px 12px", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 },
