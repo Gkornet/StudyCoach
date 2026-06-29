@@ -111,8 +111,68 @@ Kort genummerd spiekbriefje van alle begrippen.
 [svg]<svg viewBox="0 0 260 200" width="260" height="200" xmlns="http://www.w3.org/2000/svg">...</svg>[/svg]
 Stijl: fill="#e0e7ff" stroke="#4338ca" stroke-width="2" — accenten: stroke="#ef4444" stroke-dasharray="5,3" — tekst: font-size="13" fill="#1e293b" font-family="sans-serif"`;
 
+// Tweede modus: oefentoets. Geheel grounded in de geüploade stof — geen internet,
+// geen verzonnen vragen, en bewust GÉÉN cijfer (een zelfgemaakte toets kan geen echt
+// cijfer voorspellen). De leerling krijgt per begrip te zien of het zit.
+const EXAM_SYSTEM_PROMPT = `Jij bent een rustige, eerlijke toetscoach voor een leerling die moeite heeft met leren. De leerling heeft de stof geleerd en wil nu weten hoe ver hij/zij is. Jij maakt een oefentoets UIT de geüploade stof, neemt die af, kijkt eerlijk na, en laat per begrip zien of het zit.
+
+## Absoluut verboden
+- Geef NOOIT een cijfer, punten of percentage als eindoordeel. De leerling wil weten WELKE begrippen zitten en welke nog niet — geen rapportcijfer. Een zelfgemaakte oefentoets kan geen echt cijfer voorspellen; doen alsof zou oneerlijk zijn.
+- Verzin NOOIT vragen, feiten, bronnen of antwoorden buiten de geüploade stof. Elke vraag én elk goed antwoord moet herleidbaar zijn naar de bijgevoegde stof. Staat iets er niet in? Dan toets je het niet. Zoek niets op internet.
+- Verklap het antwoord niet vóórdat de leerling heeft geantwoord.
+
+## Markers (altijd gebruiken)
+[vak: Naam] — één keer bij de eerste bijlage (bijv. Geschiedenis, Wiskunde).
+[begrippen: begrip1 | begrip2 | ...] — in stap 1: de volledige lijst onderwerpen die je gaat toetsen. De app toont dit als controlekaart met een "klopt"-knop en een veld om een gemist begrip toe te voegen.
+[sessie: M vragen] — één keer, nadat de lijst klopt. M = aantal vragen.
+[voortgang: N] — VERPLICHT ná élke nagekeken vraag, steeds precies +1. Zo ziet de leerling de balk meebewegen. Nooit overslaan.
+[keuzes: Ik weet het niet 🤷] — sluit élke vraag hiermee af, zodat de leerling eerlijk kan passen in plaats van gokken.
+[uitslag: begrip1=✅ | begrip2=⚠️ | begrip3=❌] — helemaal aan het eind: per begrip of het zit (✅), wankel is (⚠️) of nog niet zit (❌). De app toont hiermee de uitslagkaart.
+
+## Sessievolgorde — volg dit strak
+
+### Stap 1: Begrippencheck (bij de eerste bijlage)
+Lees ALLE bijlagen eerst volledig en grondig, van begin tot eind, regel voor regel. Maak de lijst met onderwerpen die je gaat toetsen: élk begrip, élke term, definitie, regel, formule of jaartal dat in de stof wordt uitgelegd of benadrukt — óók wat gewoon in de lopende tekst staat. Bij twijfel: opnemen. Laat alleen echte bijzaken weg (anekdotes, losse weetjes).
+Stuur:
+- Eén zin: wat is het onderwerp?
+- "Dit ga ik je overhoren. Klopt deze lijst, of mist er nog iets?"
+- De volledige lijst als marker. Schrijf de begrippen NIET óók als gewone tekst — de kaart toont ze al.
+[vak: ...] [begrippen: begrip1 | begrip2 | ...]
+Géén [keuzes:] in dit bericht — de kaart heeft een eigen "klopt"-knop. Voegt de leerling een gemist begrip toe? Zoek het op in de stof, voeg het toe en stuur de volledige lijst opnieuw. Pas wanneer de leerling bevestigt dat de lijst klopt, ga je door naar stap 2.
+
+### Stap 2: De toets afnemen — één vraag per keer
+Bepaal het aantal vragen: minstens één vraag per begrip, zodat ALLE begrippen aan bod komen. Stuur [sessie: M vragen].
+Stel de vragen dan één voor één. JIJ bepaalt de volgorde; de leerling hoeft nooit om een vraag te vragen. Wissel de soort vraag af, passend bij de stof:
+- Kennis: een begrip, definitie, jaartal of feit ("Wat betekent ...?", "In welk jaar ...?").
+- Inzicht: oorzaak en gevolg, een verband ("Waarom ...?", "Wat was het gevolg van ...?").
+- Bron: alleen als er een bron, afbeelding of citaat in de stof staat — laat de leerling die uitleggen of aan een begrip koppelen.
+Per vraag:
+- Stel de vraag kort en duidelijk. Verklap niet vooraf welk begrip je toetst — stel gewoon de vraag.
+- Sluit af met [keuzes: Ik weet het niet 🤷]. De leerling typt het antwoord of stuurt een foto.
+- Wacht op antwoord.
+- Kijk eerlijk na tegen het goede antwoord uit de stof: goed / deels goed / fout. Geef daarna kort en vriendelijk het juiste antwoord uit de stof, zodat de leerling er meteen van leert. Geen cijfer, geen punten.
+- Stuur [voortgang: N] (+1) en ga door naar de volgende vraag.
+Houd per begrip bij of de antwoorden goed waren — dat bepaalt straks de uitslag.
+
+### Stap 3: Uitslag (pas als ALLE vragen gehad zijn)
+Loop élk begrip uit je lijst na: waren de vragen erover goed (✅), deels (⚠️) of fout/overgeslagen (❌)?
+Stuur:
+- Een korte, warme samenvatting in gewone taal: wat zit goed, wat moet nog. NOEM GEEN CIJFER.
+- Welke begrippen de leerling nog moet oefenen (de ⚠️ en ❌), als concreet lijstje.
+- De marker met de volledige uitslag, élk begrip uit de lijst erin.
+[uitslag: begrip1=✅ | begrip2=⚠️ | begrip3=❌ | ...]
+
+## Toon
+Rustig, eerlijk, bemoedigend. Dit is een óefentoets, geen examen — fouten zijn nuttig, want ze laten precies zien wat nog aandacht nodig heeft. Geen moeilijke woorden zonder uitleg. 😊 Gebruik UITSLUITEND wat in de stof staat; is iets onleesbaar, vraag het de leerling in plaats van te raden.`;
+
 const WELCOME_MESSAGE =
-  "Hoi! 👋 Ik ben jouw studiecoach.\n\nIk help je met elk vak — wiskunde, Frans, economie, biologie, je noemt het maar. Stap voor stap, geen haast, geen stomme vragen. 😊\n\n📸 **Zo beginnen we:**\nFotografeer of scan **alle stof** die je moet leren — de theorie, de voorbeelden én de opgaven. Stuur alles in één keer op.\n\nDan weet ik precies wat we gaan doen!";
+  "Hoi! 👋 Ik ben jouw studiecoach.\n\nWat wil je doen?\n\n📚 **Samen leren** — we lopen de stof stap voor stap door tot je alles snapt.\n📝 **Oefentoets maken** — ik overhoor je over de stof en laat zien welke begrippen al zitten en welke nog niet.\n\nKies hieronder. 😊";
+
+const LEER_WELCOME =
+  "Top, we gaan **samen leren**! 📚\n\n📸 **Zo beginnen we:**\nFotografeer of scan **alle stof** die je moet leren — de theorie, de voorbeelden én de opgaven. Stuur alles in één keer op.\n\nDan weet ik precies wat we gaan doen!";
+
+const TOETS_WELCOME =
+  "Top, we maken een **oefentoets**! 📝\n\n📸 **Zo beginnen we:**\nFotografeer of scan **alle stof** die je geleerd hebt — de theorie, de voorbeelden én de bronnen. Stuur alles in één keer op.\n\nDan maak ik er vragen bij, overhoor ik je, en laat ik je zien welke begrippen al zitten en welke nog aandacht nodig hebben.\n\n⚠️ Let op: dit is een óefentoets uit jouw eigen stof, geen echt proefwerk. Daarom geef ik geen cijfer — wél per onderwerp hoe ver je bent.";
 
 // ── Sessie onthouden ──────────────────────────────────────────────
 // We bewaren de hele sessie (gesprek, voortgang én de geüploade stof)
@@ -122,8 +182,14 @@ const DB_NAME = "studycoach";
 const STORE = "session";
 const KEY = "current";
 
+interface BegripScore {
+  begrip: string;
+  score: string; // ✅ | ⚠️ | ❌
+}
+
 interface SavedSession {
   messages: Message[];
+  mode: "leren" | "toets" | null;
   sessionTotal: number;
   sessionDone: number;
   sessionMinutes: number;
@@ -133,6 +199,7 @@ interface SavedSession {
   sessionStartTime: number;
   choices: string[];
   begrippen: string[];
+  toetsResult: BegripScore[];
   savedAt: number;
 }
 
@@ -192,6 +259,9 @@ export default function StudyCoach() {
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: WELCOME_MESSAGE },
   ]);
+  const [mode, setMode] = useState<"leren" | "toets" | null>(null);
+  const [toetsResult, setToetsResult] = useState<BegripScore[]>([]);
+  const [toetsComplete, setToetsComplete] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [image, setImage] = useState<string | null>(null);
@@ -226,6 +296,9 @@ export default function StudyCoach() {
       .then((saved) => {
         if (cancelled || !saved || !Array.isArray(saved.messages) || saved.messages.length <= 1) return;
         setMessages(saved.messages);
+        // Oudere sessies hebben nog geen mode — die waren altijd "leren".
+        setMode(saved.mode ?? "leren");
+        setToetsResult(saved.toetsResult || []);
         setSessionTotal(saved.sessionTotal || 0);
         setSessionDone(saved.sessionDone || 0);
         setSessionMinutes(saved.sessionMinutes || 0);
@@ -247,10 +320,10 @@ export default function StudyCoach() {
   useEffect(() => {
     if (!loaded || messages.length <= 1) return;
     idbSet({
-      messages, sessionTotal, sessionDone, sessionMinutes, vak, aanpak,
-      sessionConcepts, sessionStartTime, choices, begrippen, savedAt: Date.now(),
+      messages, mode, sessionTotal, sessionDone, sessionMinutes, vak, aanpak,
+      sessionConcepts, sessionStartTime, choices, begrippen, toetsResult, savedAt: Date.now(),
     }).catch(() => {});
-  }, [loaded, messages, sessionTotal, sessionDone, sessionMinutes, vak, aanpak, sessionConcepts, sessionStartTime, choices, begrippen]);
+  }, [loaded, messages, mode, sessionTotal, sessionDone, sessionMinutes, vak, aanpak, sessionConcepts, sessionStartTime, choices, begrippen, toetsResult]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -321,6 +394,24 @@ export default function StudyCoach() {
       setSessionConcepts(concepts);
       setTimeout(() => setSessionComplete(true), 600);
     }
+
+    // Examen-modus: de uitslag per begrip (✅ zit / ⚠️ wankel / ❌ nog niet).
+    const uitslag = text.match(/\[uitslag:\s*([^\]]+)\]/i);
+    if (uitslag) {
+      const items = uitslag[1].split("|").map(s => s.trim()).filter(Boolean).map((pair) => {
+        const eq = pair.lastIndexOf("=");
+        const begrip = eq >= 0 ? pair.slice(0, eq).trim() : pair;
+        const score = eq >= 0 ? pair.slice(eq + 1).trim() : "⚠️";
+        return { begrip, score };
+      });
+      setToetsResult(items);
+      setTimeout(() => setToetsComplete(true), 600);
+    }
+  };
+
+  const chooseMode = (m: "leren" | "toets") => {
+    setMode(m);
+    setMessages([{ role: "assistant", content: m === "toets" ? TOETS_WELCOME : LEER_WELCOME }]);
   };
 
   const sendChoice = (choice: string) => {
@@ -406,7 +497,7 @@ export default function StudyCoach() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages, system: SYSTEM_PROMPT }),
+        body: JSON.stringify({ messages: apiMessages, system: mode === "toets" ? EXAM_SYSTEM_PROMPT : SYSTEM_PROMPT }),
       });
 
       let data;
@@ -434,6 +525,9 @@ export default function StudyCoach() {
 
   const startNewSession = () => {
     idbClear().catch(() => {});
+    setMode(null);
+    setToetsResult([]);
+    setToetsComplete(false);
     setSessionComplete(false);
     setSessionTotal(0);
     setSessionDone(0);
@@ -454,7 +548,7 @@ export default function StudyCoach() {
   };
 
   const stripMarkers = (text: string) =>
-    text.replace(/\[(keuzes|sessie|voortgang|sessie-klaar|vak|aanpak|begrippen):[^\]]*\]/gi, "").trim();
+    text.replace(/\[(keuzes|sessie|voortgang|sessie-klaar|vak|aanpak|begrippen|uitslag):[^\]]*\]/gi, "").trim();
 
   const sanitizeSvg = (svg: string) =>
     svg.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/\son\w+="[^"]*"/gi, "");
@@ -495,8 +589,8 @@ export default function StudyCoach() {
             <span style={styles.logoIcon}>📐</span>
             <div>
               <div style={styles.logoTitle}>StudyCoach</div>
-              {(vak || aanpak) && (
-                <div style={styles.logoSub}>{[vak, aanpak && `📖 ${aanpak}`].filter(Boolean).join(" · ")}</div>
+              {(vak || aanpak || mode === "toets") && (
+                <div style={styles.logoSub}>{[mode === "toets" ? "📝 Oefentoets" : null, vak, aanpak && `📖 ${aanpak}`].filter(Boolean).join(" · ")}</div>
               )}
             </div>
           </div>
@@ -504,7 +598,7 @@ export default function StudyCoach() {
             <div style={styles.progressWrap}>
               <div style={styles.progressInfo}>
                 <span style={{ ...styles.progressLabel, animation: celebrate ? "pop 0.6s ease" : "none" }}>
-                  {celebrate ? "⭐" : `Stap ${sessionDone}/${sessionTotal}`}
+                  {celebrate ? "⭐" : `${mode === "toets" ? "Vraag" : "Stap"} ${sessionDone}/${sessionTotal}`}
                 </span>
                 <span style={styles.progressTime}>
                   {sessionDone >= sessionTotal
@@ -561,14 +655,14 @@ export default function StudyCoach() {
 
       {begrippen.length > 0 && !loading && (
         <div style={styles.begrippenCard}>
-          <div style={styles.begrippenTitle}>📋 Dit ga ik je leren — klopt deze lijst?</div>
+          <div style={styles.begrippenTitle}>📋 {mode === "toets" ? "Dit ga ik je overhoren" : "Dit ga ik je leren"} — klopt deze lijst?</div>
           <div style={styles.begrippenList}>
             {begrippen.map((b, i) => (
               <span key={i} style={styles.begripChip}>{b}</span>
             ))}
           </div>
           <button style={styles.begrippenConfirm} onClick={confirmBegrippen}>
-            ✅ Ja, dit klopt — beginnen!
+            {mode === "toets" ? "✅ Ja, dit klopt — overhoor me!" : "✅ Ja, dit klopt — beginnen!"}
           </button>
           <div style={styles.begrippenAddRow}>
             <input
@@ -585,6 +679,13 @@ export default function StudyCoach() {
         </div>
       )}
 
+      {mode === null && loaded && !loading && (
+        <div style={styles.choicesBar}>
+          <button style={styles.modeBtn} onClick={() => chooseMode("leren")}>📚 Samen leren</button>
+          <button style={styles.modeBtn} onClick={() => chooseMode("toets")}>📝 Oefentoets maken</button>
+        </div>
+      )}
+
       {choices.length > 0 && !loading && (
         <div style={styles.choicesBar}>
           {choices.map((c, i) => (
@@ -593,6 +694,7 @@ export default function StudyCoach() {
         </div>
       )}
 
+      {mode !== null && (
       <footer style={styles.footer}>
         {(image || pdfs.length > 0) && (
           <div style={styles.attachments}>
@@ -629,6 +731,7 @@ export default function StudyCoach() {
         </div>
         <p style={styles.hint}>Enter om te sturen · 📷 foto · 📄 PDF met lesstof</p>
       </footer>
+      )}
       <style>{`
         @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-7px)} }
         @keyframes pop { 0%{transform:scale(1)} 40%{transform:scale(1.5)} 100%{transform:scale(1)} }
@@ -669,6 +772,65 @@ export default function StudyCoach() {
           </div>
         </div>
       )}
+
+      {toetsComplete && (() => {
+        const total = toetsResult.length;
+        const beheerst = toetsResult.filter((r) => r.score === "✅").length;
+        const nogLeren = toetsResult.filter((r) => r.score !== "✅");
+        const pct = total ? Math.round((beheerst / total) * 100) : 0;
+        const chipStyle = (score: string): React.CSSProperties =>
+          score === "✅"
+            ? { background: "#dcfce7", color: "#166534", border: "1px solid #86efac" }
+            : score === "❌"
+              ? { background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5" }
+              : { background: "#fef9c3", color: "#854d0e", border: "1px solid #fde047" };
+        return (
+          <div style={styles.overlay}>
+            <div style={styles.endCard}>
+              <div style={styles.endTrophy}>📝</div>
+              <div style={styles.endTitle}>Oefentoets klaar!</div>
+              <div style={styles.endSub}>
+                {beheerst} van de {total} begrippen zitten al
+              </div>
+
+              <div style={styles.readyTrack}>
+                <div style={{ ...styles.readyFill, width: `${pct}%` }} />
+              </div>
+
+              <div style={styles.endSection}>
+                <div style={styles.endSectionTitle}>Hoe ver ben je?</div>
+                <div style={styles.conceptsWrap}>
+                  {toetsResult.map((r, i) => (
+                    <span key={i} style={{ ...styles.conceptChip, ...chipStyle(r.score) }}>
+                      {r.score} {r.begrip}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {nogLeren.length > 0 ? (
+                <div style={styles.endMessage}>
+                  <strong>Dit kun je nog oefenen:</strong> {nogLeren.map((r) => r.begrip).join(", ")}.
+                  <br />Ga terug naar de stof voor deze onderwerpen en toets jezelf later opnieuw. 💪
+                </div>
+              ) : (
+                <div style={styles.endMessage}>
+                  Alles zit! 🎉 Je hebt elk onderwerp goed beantwoord. Sterk gedaan — succes met de toets!
+                </div>
+              )}
+
+              <div style={styles.endBtnRow}>
+                <button style={styles.endBtnSecondary} onClick={() => setToetsComplete(false)}>
+                  Mijn antwoorden bekijken
+                </button>
+                <button style={{ ...styles.endBtn, flex: 1, minWidth: 140, width: "auto" }} onClick={startNewSession}>
+                  Nieuwe sessie →
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -733,6 +895,11 @@ const styles: Record<string, React.CSSProperties> = {
   begrippenInput: { flex: 1, background: "#f8fafc", border: "2px solid #e2e8f0", borderRadius: 12, padding: "9px 12px", fontSize: "0.9rem", fontFamily: "inherit", color: "#1e293b", outline: "none" },
   begrippenAddBtn: { background: "#eef2ff", border: "2px solid #c7d2fe", color: "#4338ca", borderRadius: 12, padding: "9px 14px", fontSize: "0.85rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 },
   choiceBtn: { background: "#f0f4ff", border: "2px solid #c7d2fe", color: "#4338ca", borderRadius: 20, padding: "7px 16px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
+  modeBtn: { flex: 1, minWidth: 150, background: "linear-gradient(135deg,#2563eb,#4f46e5)", color: "white", border: "none", borderRadius: 16, padding: "13px 18px", fontSize: "0.95rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
+  readyTrack: { width: "100%", height: 10, background: "#e2e8f0", borderRadius: 8, overflow: "hidden", marginBottom: 24 },
+  readyFill: { height: "100%", background: "linear-gradient(90deg,#22c55e,#16a34a)", borderRadius: 8, transition: "width 0.6s cubic-bezier(.4,0,.2,1)" },
+  endBtnRow: { display: "flex", gap: 10, flexWrap: "wrap" as const },
+  endBtnSecondary: { flex: 1, minWidth: 140, background: "white", color: "#4338ca", border: "2px solid #c7d2fe", borderRadius: 50, padding: "12px 20px", fontSize: "0.95rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
   resumeBar: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" as const, background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46", borderRadius: 14, padding: "10px 14px", fontSize: "0.85rem", fontWeight: 500 },
   resumeBtn: { background: "white", border: "1px solid #6ee7b7", color: "#047857", borderRadius: 20, padding: "5px 12px", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 },
   svgWrap: { margin: "10px 0", lineHeight: 0 },
