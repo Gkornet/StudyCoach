@@ -92,12 +92,84 @@ Kort genummerd spiekbriefje van alle begrippen.
 [svg]<svg viewBox="0 0 260 200" width="260" height="200" xmlns="http://www.w3.org/2000/svg">...</svg>[/svg]
 Stijl: fill="#e0e7ff" stroke="#4338ca" stroke-width="2" — accenten: stroke="#ef4444" stroke-dasharray="5,3" — tekst: font-size="13" fill="#1e293b" font-family="sans-serif"`;
 
+const WELCOME_MESSAGE =
+  "Hoi! 👋 Ik ben jouw studiecoach.\n\nIk help je met elk vak — wiskunde, Frans, economie, biologie, je noemt het maar. Stap voor stap, geen haast, geen stomme vragen. 😊\n\n📸 **Zo beginnen we:**\nFotografeer of scan **alle stof** die je moet leren — de theorie, de voorbeelden én de opgaven. Stuur alles in één keer op.\n\nDan weet ik precies wat we gaan doen!";
+
+// ── Sessie onthouden ──────────────────────────────────────────────
+// We bewaren de hele sessie (gesprek, voortgang én de geüploade stof)
+// in IndexedDB. Dat kan grote PDF's aan — localStorage (max ~5 MB) niet.
+// Zo kan de leerling de pagina sluiten en later verder waar ze gebleven was.
+const DB_NAME = "studycoach";
+const STORE = "session";
+const KEY = "current";
+
+interface SavedSession {
+  messages: Message[];
+  sessionTotal: number;
+  sessionDone: number;
+  sessionMinutes: number;
+  vak: string | null;
+  sessionConcepts: string[];
+  sessionStartTime: number;
+  choices: string[];
+  savedAt: number;
+}
+
+function idbOpen(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") { reject(new Error("geen IndexedDB")); return; }
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSet(value: SavedSession): Promise<void> {
+  const db = await idbOpen();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(value, KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function idbGet(): Promise<SavedSession | undefined> {
+  const db = await idbOpen();
+  try {
+    return await new Promise<SavedSession | undefined>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const r = tx.objectStore(STORE).get(KEY);
+      r.onsuccess = () => resolve(r.result as SavedSession | undefined);
+      r.onerror = () => reject(r.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function idbClear(): Promise<void> {
+  const db = await idbOpen();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).delete(KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
 export default function StudyCoach() {
   const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "Hoi! 👋 Ik ben jouw studiecoach.\n\nIk help je met elk vak — wiskunde, Frans, economie, biologie, je noemt het maar. Stap voor stap, geen haast, geen stomme vragen. 😊\n\n📸 **Zo beginnen we:**\nFotografeer of scan **alle stof** die je moet leren — de theorie, de voorbeelden én de opgaven. Stuur alles in één keer op.\n\nDan weet ik precies wat we gaan doen!",
-    },
+    { role: "assistant", content: WELCOME_MESSAGE },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -111,8 +183,10 @@ export default function StudyCoach() {
   const [celebrate, setCelebrate] = useState(false);
   const [sessionComplete, setSessionComplete] = useState(false);
   const [sessionConcepts, setSessionConcepts] = useState<string[]>([]);
-  const [sessionStartTime] = useState(() => Date.now());
+  const [sessionStartTime, setSessionStartTime] = useState(() => Date.now());
   const [vak, setVak] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +194,37 @@ export default function StudyCoach() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Eenmalig bij openen: eerdere sessie terughalen (verder waar ze was gebleven).
+  useEffect(() => {
+    let cancelled = false;
+    idbGet()
+      .then((saved) => {
+        if (cancelled || !saved || !Array.isArray(saved.messages) || saved.messages.length <= 1) return;
+        setMessages(saved.messages);
+        setSessionTotal(saved.sessionTotal || 0);
+        setSessionDone(saved.sessionDone || 0);
+        setSessionMinutes(saved.sessionMinutes || 0);
+        setVak(saved.vak ?? null);
+        setSessionConcepts(saved.sessionConcepts || []);
+        if (saved.sessionStartTime) setSessionStartTime(saved.sessionStartTime);
+        setChoices(saved.choices || []);
+        setRestored(true);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Na elke wijziging de sessie bewaren — maar pas nadat we hebben geprobeerd
+  // een bestaande sessie te laden, anders overschrijven we die met het startscherm.
+  useEffect(() => {
+    if (!loaded || messages.length <= 1) return;
+    idbSet({
+      messages, sessionTotal, sessionDone, sessionMinutes, vak,
+      sessionConcepts, sessionStartTime, choices, savedAt: Date.now(),
+    }).catch(() => {});
+  }, [loaded, messages, sessionTotal, sessionDone, sessionMinutes, vak, sessionConcepts, sessionStartTime, choices]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -199,6 +304,7 @@ export default function StudyCoach() {
   const sendMessageWith = async (text: string) => {
     if (!text.trim() && !image && !pdfs.length) return;
     setChoices([]);
+    setRestored(false);
 
     let userContent = text;
     if (!userContent && image) userContent = "📷 [Foto gestuurd — los deze opgave op]";
@@ -281,6 +387,20 @@ export default function StudyCoach() {
     }
   };
 
+  const startNewSession = () => {
+    idbClear().catch(() => {});
+    setSessionComplete(false);
+    setSessionTotal(0);
+    setSessionDone(0);
+    setSessionMinutes(0);
+    setSessionConcepts([]);
+    setVak(null);
+    setChoices([]);
+    setRestored(false);
+    setSessionStartTime(Date.now());
+    setMessages([{ role: "assistant", content: WELCOME_MESSAGE }]);
+  };
+
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
@@ -355,6 +475,12 @@ export default function StudyCoach() {
       </header>
 
       <main style={styles.main}>
+        {restored && (
+          <div style={styles.resumeBar}>
+            <span>👋 Welkom terug! Je gaat verder waar je was gebleven.</span>
+            <button style={styles.resumeBtn} onClick={startNewSession}>Opnieuw beginnen</button>
+          </div>
+        )}
         {messages.map((msg, i) => (
           <div key={i} style={{ ...styles.row, ...(msg.role === "user" ? styles.rowUser : {}) }}>
             {msg.role === "assistant" && <div style={styles.avatar}>🤖</div>}
@@ -461,21 +587,7 @@ export default function StudyCoach() {
               Super gedaan! Je hebt hard gewerkt en nieuwe dingen geleerd. Succes bij de toets — je kan dit! 💪
             </div>
 
-            <button
-              style={styles.endBtn}
-              onClick={() => {
-                setSessionComplete(false);
-                setSessionTotal(0);
-                setSessionDone(0);
-                setSessionConcepts([]);
-                setVak(null);
-                setMessages([{
-                  role: "assistant",
-                  content: "Hoi! 👋 Ik ben jouw studiecoach.\n\nIk help je met elk vak — wiskunde, Frans, economie, biologie, je noemt het maar. Stap voor stap, geen haast, geen stomme vragen. 😊\n\n📸 **Zo beginnen we:**\nFotografeer of scan **alle stof** die je moet leren — de theorie, de voorbeelden én de opgaven. Stuur alles in één keer op.\n\nDan weet ik precies wat we gaan doen!",
-                }]);
-                setChoices([]);
-              }}
-            >
+            <button style={styles.endBtn} onClick={startNewSession}>
               Nieuwe sessie starten →
             </button>
           </div>
@@ -537,6 +649,8 @@ const styles: Record<string, React.CSSProperties> = {
   endBtn: { background: "linear-gradient(135deg,#2563eb,#4f46e5)", color: "white", border: "none", borderRadius: 50, padding: "14px 32px", fontSize: "1rem", fontWeight: 700, cursor: "pointer", width: "100%" },
   choicesBar: { display: "flex", flexWrap: "wrap" as const, gap: 8, padding: "8px 16px", background: "white", borderTop: "1px solid #e2e8f0" },
   choiceBtn: { background: "#f0f4ff", border: "2px solid #c7d2fe", color: "#4338ca", borderRadius: 20, padding: "7px 16px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
+  resumeBar: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" as const, background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46", borderRadius: 14, padding: "10px 14px", fontSize: "0.85rem", fontWeight: 500 },
+  resumeBtn: { background: "white", border: "1px solid #6ee7b7", color: "#047857", borderRadius: 20, padding: "5px 12px", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 },
   svgWrap: { margin: "10px 0", lineHeight: 0 },
   mdTable: { borderCollapse: "collapse" as const, margin: "8px 0", fontSize: "0.9rem", width: "100%" },
   mdTh: { border: "1px solid #cbd5e1", padding: "6px 12px", background: "#f1f5f9", textAlign: "left" as const },
