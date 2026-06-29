@@ -3,13 +3,64 @@ import { NextRequest, NextResponse } from "next/server";
 // Grote PDF's + retries kunnen langer duren dan de standaard 10s van Vercel.
 export const maxDuration = 60;
 
+// Anthropic accepteert maximaal ~32 MB aan inhoud per verzoek. We blokkeren
+// ruim daaronder, zodat een normale PDF (3 MB ≈ 4 MB base64) altijd kan, maar
+// een veel te grote bundel meteen een duidelijke melding krijgt i.p.v. een
+// trage, cryptische fout.
+const MAX_ATTACHMENT_BYTES = 28 * 1024 * 1024;
+
+// Aantal bytes dat een base64-string voorstelt (zonder te decoderen).
+function base64Bytes(data: string): number {
+  const len = data.length;
+  const padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
+  return Math.floor((len * 3) / 4) - padding;
+}
+
+// Goedkope vingerafdruk om dezelfde bijlage te herkennen zonder megabytes te hashen.
+function fingerprint(type: string, data: string): string {
+  return `${type}:${data.length}:${data.slice(0, 48)}:${data.slice(-48)}`;
+}
+
+// Controleer de bijlagen server-side: ontdubbel identieke PDF's/foto's (een al
+// bekende bijlage hoeft niet nóg een keer verwerkt te worden) en tel de totale
+// omvang. Zo blijft elk verzoek licht en voorspelbaar.
+function prepareMessages(messages: unknown[]): { messages: unknown[]; totalBytes: number } {
+  const seen = new Set<string>();
+  let totalBytes = 0;
+  const out = messages.map((raw) => {
+    const m = raw as { role: string; content: unknown };
+    if (!Array.isArray(m.content)) return m;
+    const content = m.content.filter((rawBlock) => {
+      const block = rawBlock as { type?: string; source?: { data?: string } };
+      if (block.type === "document" || block.type === "image") {
+        const data = block.source?.data || "";
+        const key = fingerprint(block.type, data);
+        if (seen.has(key)) return false; // al bekend → niet opnieuw meesturen
+        seen.add(key);
+        totalBytes += base64Bytes(data);
+      }
+      return true;
+    });
+    return { ...m, content };
+  });
+  return { messages: out, totalBytes };
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { messages, system } = body;
+  const { system } = body;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "API key not configured" }, { status: 500 });
+  }
+
+  const prepared = prepareMessages(Array.isArray(body.messages) ? body.messages : []);
+  const messages = prepared.messages;
+  if (prepared.totalBytes > MAX_ATTACHMENT_BYTES) {
+    return NextResponse.json({
+      error: "De stof is in één keer te groot om te verwerken. 📄\n\nSplits de PDF in kleinere delen (bijvoorbeeld per hoofdstuk) en stuur die één voor één. Minder pagina's tegelijk werkt het best.",
+    }, { status: 413 });
   }
 
   // Anthropic kan tijdelijk overbelast zijn (429/529) of een 5xx geven.
