@@ -3,6 +3,9 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { User } from "@supabase/supabase-js";
+import { supabase, supabaseEnabled } from "./lib/supabaseClient";
+import LoginScreen from "./LoginScreen";
 
 interface PdfFile {
   data: string;
@@ -320,6 +323,9 @@ export default function StudyCoach() {
   const [aanpak, setAanpak] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [skipAuth, setSkipAuth] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -327,6 +333,19 @@ export default function StudyCoach() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Inlogstatus volgen. Zonder Supabase-sleutels draait de app gewoon door zonder login.
+  useEffect(() => {
+    if (!supabase) { setAuthReady(true); return; }
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setAuthReady(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   // Eenmalig bij openen: eerdere sessie terughalen (verder waar ze was gebleven).
   useEffect(() => {
@@ -629,6 +648,20 @@ export default function StudyCoach() {
     );
   };
 
+  // Wachten tot de inlogstatus bekend is, anders flitst het inlogscherm.
+  if (supabaseEnabled && !authReady) {
+    return <div style={styles.splash}>Even laden…</div>;
+  }
+  // Niet ingelogd en niet bewust overgeslagen → eerst inloggen.
+  if (supabaseEnabled && !user && !skipAuth) {
+    return <LoginScreen onSkip={() => setSkipAuth(true)} />;
+  }
+
+  const logout = async () => {
+    await supabase?.auth.signOut();
+    startNewSession();
+  };
+
   return (
     <div style={styles.wrapper}>
       <header style={styles.header}>
@@ -642,6 +675,7 @@ export default function StudyCoach() {
               )}
             </div>
           </div>
+          <div style={styles.headerRight}>
           {sessionTotal > 0 ? (
             <div style={styles.progressWrap}>
               <div style={styles.progressInfo}>
@@ -663,6 +697,8 @@ export default function StudyCoach() {
           ) : (
             <div style={styles.badge}><span style={styles.dot} />Online</div>
           )}
+          {user && <button style={styles.logoutBtn} onClick={logout} title="Uitloggen">⎋</button>}
+          </div>
         </div>
       </header>
 
@@ -886,7 +922,10 @@ export default function StudyCoach() {
 
 const styles: Record<string, React.CSSProperties> = {
   wrapper: { minHeight: "100dvh", display: "flex", flexDirection: "column", background: "#f0f4ff", fontFamily: "'Segoe UI', system-ui, sans-serif", maxWidth: 780, margin: "0 auto" },
+  splash: { minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f0f4ff", color: "#64748b", fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: "0.95rem" },
   header: { background: "linear-gradient(135deg,#2563eb,#4f46e5)", color: "white", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 2px 16px rgba(37,99,235,0.35)" },
+  headerRight: { display: "flex", alignItems: "center", gap: 10 },
+  logoutBtn: { background: "rgba(255,255,255,0.2)", color: "white", border: "none", borderRadius: "50%", width: 32, height: 32, fontSize: "1rem", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   headerInner: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px" },
   logo: { display: "flex", alignItems: "center", gap: 12 },
   logoIcon: { fontSize: "2rem", background: "rgba(255,255,255,0.2)", borderRadius: 12, width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center" },
