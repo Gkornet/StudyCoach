@@ -26,6 +26,7 @@ De leerstof = de **dikgedrukte (vetgedrukte) begrippen** in de tekst, plus formu
 ## Markers (altijd gebruiken)
 [keuzes: A | B | C] — sluit elk bericht af met 2–4 keuzes. Na uitleg: "📷 Foto gestuurd" + "✍️ Ik typ het". Na opgave: "📷 Mijn uitwerking" + "✍️ Mijn antwoord typen".
 [vak: Naam] — één keer bij eerste bijlage (bijv. Wiskunde, Frans, Economie)
+[aanpak: korte naam] — één keer, nadat de leerling in stap 2 koos hoe hij het liefst leert (bijv. "als verhaal", "stap voor stap", "met ezelsbruggetjes")
 [sessie: N stappen] — één keer bij eerste bijlage
 [voortgang: N] — VERPLICHT ná élk afgerond begrip. N = aantal afgeronde begrippen, steeds precies +1. Nooit overslaan.
 [sessie-klaar: begrip1 | begrip2] — als alles klaar is
@@ -51,6 +52,7 @@ Kies de keuzes passend bij het vak, bijvoorbeeld:
 - Frans/talen: "Woordjes met ezelsbruggetjes" | "Met voorbeeldzinnen" | "Overhoor me veel"
 - Economie: "Met een voorbeeld uit het echt" | "Als 'als dit… dan dat'" | "Met een tekening of grafiek"
 - Biologie/Scheikunde: "Leg het uit als een verhaal" | "Met een tekening of schema" | "Met ezelsbruggetjes"
+Zodra de leerling kiest: bevestig kort en warm, en stuur [aanpak: <korte naam van de gekozen manier>] zodat de keuze in het menu zichtbaar blijft.
 [keuzes: <drie manieren die bij dit vak passen> | Weet ik niet 🤷]
 
 ### Stap 3: Warme vraag
@@ -122,6 +124,7 @@ interface SavedSession {
   sessionDone: number;
   sessionMinutes: number;
   vak: string | null;
+  aanpak: string | null;
   sessionConcepts: string[];
   sessionStartTime: number;
   choices: string[];
@@ -198,6 +201,7 @@ export default function StudyCoach() {
   const [sessionConcepts, setSessionConcepts] = useState<string[]>([]);
   const [sessionStartTime, setSessionStartTime] = useState(() => Date.now());
   const [vak, setVak] = useState<string | null>(null);
+  const [aanpak, setAanpak] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -219,6 +223,7 @@ export default function StudyCoach() {
         setSessionDone(saved.sessionDone || 0);
         setSessionMinutes(saved.sessionMinutes || 0);
         setVak(saved.vak ?? null);
+        setAanpak(saved.aanpak ?? null);
         setSessionConcepts(saved.sessionConcepts || []);
         if (saved.sessionStartTime) setSessionStartTime(saved.sessionStartTime);
         setChoices(saved.choices || []);
@@ -234,10 +239,10 @@ export default function StudyCoach() {
   useEffect(() => {
     if (!loaded || messages.length <= 1) return;
     idbSet({
-      messages, sessionTotal, sessionDone, sessionMinutes, vak,
+      messages, sessionTotal, sessionDone, sessionMinutes, vak, aanpak,
       sessionConcepts, sessionStartTime, choices, savedAt: Date.now(),
     }).catch(() => {});
-  }, [loaded, messages, sessionTotal, sessionDone, sessionMinutes, vak, sessionConcepts, sessionStartTime, choices]);
+  }, [loaded, messages, sessionTotal, sessionDone, sessionMinutes, vak, aanpak, sessionConcepts, sessionStartTime, choices]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -293,6 +298,9 @@ export default function StudyCoach() {
     }
     const vakMatch = text.match(/\[vak:\s*([^\]]+)\]/i);
     if (vakMatch) setVak(vakMatch[1].trim());
+
+    const aanpakMatch = text.match(/\[aanpak:\s*([^\]]+)\]/i);
+    if (aanpakMatch) setAanpak(aanpakMatch[1].trim());
 
     const klaar = text.match(/\[sessie-klaar:\s*([^\]]+)\]/i);
     if (klaar) {
@@ -408,6 +416,7 @@ export default function StudyCoach() {
     setSessionMinutes(0);
     setSessionConcepts([]);
     setVak(null);
+    setAanpak(null);
     setChoices([]);
     setRestored(false);
     setSessionStartTime(Date.now());
@@ -419,7 +428,7 @@ export default function StudyCoach() {
   };
 
   const stripMarkers = (text: string) =>
-    text.replace(/\[(keuzes|sessie|voortgang|sessie-klaar|vak):[^\]]*\]/gi, "").trim();
+    text.replace(/\[(keuzes|sessie|voortgang|sessie-klaar|vak|aanpak):[^\]]*\]/gi, "").trim();
 
   const sanitizeSvg = (svg: string) =>
     svg.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/\son\w+="[^"]*"/gi, "");
@@ -460,7 +469,9 @@ export default function StudyCoach() {
             <span style={styles.logoIcon}>📐</span>
             <div>
               <div style={styles.logoTitle}>StudyCoach</div>
-              {vak && <div style={styles.logoSub}>{vak}</div>}
+              {(vak || aanpak) && (
+                <div style={styles.logoSub}>{[vak, aanpak && `📖 ${aanpak}`].filter(Boolean).join(" · ")}</div>
+              )}
             </div>
           </div>
           {sessionTotal > 0 ? (
