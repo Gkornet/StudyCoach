@@ -121,9 +121,9 @@ export default function StudyCoach() {
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    const tooBig = files.find(f => f.size > 3 * 1024 * 1024);
+    const tooBig = files.find(f => f.size > 10 * 1024 * 1024);
     if (tooBig) {
-      alert(`"${tooBig.name}" is te groot (max 3 MB per PDF). Comprimeer het bestand.`);
+      alert(`"${tooBig.name}" is te groot (max 10 MB per PDF). Comprimeer het bestand.`);
       if (pdfInputRef.current) pdfInputRef.current.value = "";
       return;
     }
