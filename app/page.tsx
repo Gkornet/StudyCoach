@@ -12,8 +12,9 @@ interface PdfFile {
 interface Message {
   role: "user" | "assistant";
   content: string;
-  image?: string;
-  imageType?: string;
+  images?: { data: string; type: string }[];
+  image?: string;      // legacy: oudere sessies bewaarden één foto
+  imageType?: string;  // legacy
   pdfs?: PdfFile[];
 }
 
@@ -169,10 +170,10 @@ const WELCOME_MESSAGE =
   "Hoi! 👋 Ik ben jouw studiecoach.\n\nWat wil je doen?\n\n📚 **Samen leren** — we lopen de stof stap voor stap door tot je alles snapt.\n📝 **Oefentoets maken** — ik overhoor je over de stof en laat zien welke begrippen al zitten en welke nog niet.\n\nKies hieronder. 😊";
 
 const LEER_WELCOME =
-  "Top, we gaan **samen leren**! 📚\n\n📸 **Zo beginnen we:**\nFotografeer of scan **alle stof** die je moet leren — de theorie, de voorbeelden én de opgaven. Stuur alles in één keer op.\n\nDan weet ik precies wat we gaan doen!";
+  "Top, we gaan **samen leren**! 📚\n\n📸 **Zo beginnen we:**\nMaak met de 📷-knop een **foto van elke bladzijde** die je moet leren — de theorie, de voorbeelden én de opgaven. Je mag in één keer meerdere foto's kiezen. Geen PDF nodig!\n\nDan weet ik precies wat we gaan doen!";
 
 const TOETS_WELCOME =
-  "Top, we maken een **oefentoets**! 📝\n\n📸 **Zo beginnen we:**\nFotografeer of scan **alle stof** die je geleerd hebt — de theorie, de voorbeelden én de bronnen. Stuur alles in één keer op.\n\nDan maak ik er vragen bij, overhoor ik je, en laat ik je zien welke begrippen al zitten en welke nog aandacht nodig hebben.\n\n⚠️ Let op: dit is een óefentoets uit jouw eigen stof, geen echt proefwerk. Daarom geef ik geen cijfer — wél per onderwerp hoe ver je bent.";
+  "Top, we maken een **oefentoets**! 📝\n\n📸 **Zo beginnen we:**\nMaak met de 📷-knop een **foto van elke bladzijde** die je geleerd hebt — de theorie, de voorbeelden én de bronnen. Je mag in één keer meerdere foto's kiezen. Geen PDF nodig!\n\nDan maak ik er vragen bij, overhoor ik je, en laat ik je zien welke begrippen al zitten en welke nog aandacht nodig hebben.\n\n⚠️ Let op: dit is een óefentoets uit jouw eigen stof, geen echt proefwerk. Daarom geef ik geen cijfer — wél per onderwerp hoe ver je bent.";
 
 // ── Sessie onthouden ──────────────────────────────────────────────
 // We bewaren de hele sessie (gesprek, voortgang én de geüploade stof)
@@ -255,6 +256,44 @@ async function idbClear(): Promise<void> {
   }
 }
 
+// Foto's van een telefoon zijn al snel 3-4 MB. We verkleinen ze in de browser naar
+// een lange zijde van ~1600px en heren-coderen als JPEG. Dat houdt boektekst goed
+// leesbaar (belangrijk — anders leest de coach de stof verkeerd) maar brengt de
+// omvang terug naar enkele honderden KB, zodat meerdere pagina's samen passen.
+// Lukt decoderen niet (bijv. een exotisch formaat), dan sturen we de foto ongemoeid.
+function downscaleImage(file: File, maxEdge = 1600, quality = 0.75): Promise<{ data: string; type: string }> {
+  return new Promise((resolve) => {
+    const fallback = () => {
+      const reader = new FileReader();
+      reader.onload = (ev) => resolve({ data: (ev.target?.result as string).split(",")[1], type: file.type || "image/jpeg" });
+      reader.onerror = () => resolve({ data: "", type: file.type || "image/jpeg" });
+      reader.readAsDataURL(file);
+    };
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { fallback(); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      try {
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve({ data: dataUrl.split(",")[1], type: "image/jpeg" });
+      } catch {
+        fallback();
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); fallback(); };
+    img.src = url;
+  });
+}
+
 export default function StudyCoach() {
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: WELCOME_MESSAGE },
@@ -264,8 +303,8 @@ export default function StudyCoach() {
   const [toetsComplete, setToetsComplete] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [image, setImage] = useState<string | null>(null);
-  const [imageType, setImageType] = useState<string>("image/jpeg");
+  const [images, setImages] = useState<{ data: string; type: string }[]>([]);
+  const [processingPhotos, setProcessingPhotos] = useState(false);
   const [pdfs, setPdfs] = useState<PdfFile[]>([]);
   const [choices, setChoices] = useState<string[]>([]);
   const [begrippen, setBegrippen] = useState<string[]>([]);
@@ -325,15 +364,25 @@ export default function StudyCoach() {
     }).catch(() => {});
   }, [loaded, messages, mode, sessionTotal, sessionDone, sessionMinutes, vak, aanpak, sessionConcepts, sessionStartTime, choices, begrippen, toetsResult]);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageType(file.type);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setImage((ev.target?.result as string).split(",")[1]);
-    };
-    reader.readAsDataURL(file);
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!files.length) return;
+    setProcessingPhotos(true);
+    try {
+      const processed = await Promise.all(files.map((f) => downscaleImage(f)));
+      setImages((prev) => [...prev, ...processed.filter((p) => p.data)]);
+    } finally {
+      setProcessingPhotos(false);
+    }
+  };
+
+  // Foto's uit een bericht ophalen — ondersteunt het nieuwe images[] én het oude
+  // enkele image-veld van eerder opgeslagen sessies.
+  const msgImages = (m: Message): { data: string; type: string }[] => {
+    if (m.images?.length) return m.images;
+    if (m.image) return [{ data: m.image, type: m.imageType || "image/jpeg" }];
+    return [];
   };
 
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -437,26 +486,25 @@ export default function StudyCoach() {
   };
 
   const sendMessageWith = async (text: string) => {
-    if (!text.trim() && !image && !pdfs.length) return;
+    if (!text.trim() && !images.length && !pdfs.length) return;
     setChoices([]);
     setBegrippen([]);
     setRestored(false);
 
     let userContent = text;
-    if (!userContent && image) userContent = "📷 [Foto gestuurd — los deze opgave op]";
+    if (!userContent && images.length) userContent = images.length > 1 ? `📷 [${images.length} foto's gestuurd]` : "📷 [Foto gestuurd]";
     if (!userContent && pdfs.length) userContent = pdfs.map(p => `📄 [PDF gestuurd: ${p.name}]`).join("\n");
 
     const userMsg: Message = {
       role: "user",
       content: userContent,
-      image: image || undefined,
-      imageType: image ? imageType : undefined,
+      images: images.length ? images : undefined,
       pdfs: pdfs.length ? pdfs : undefined,
     };
 
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
-    setImage(null);
+    setImages([]);
     setPdfs([]);
     setLoading(true);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -472,8 +520,8 @@ export default function StudyCoach() {
             blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: p.data } });
           }
         }
-        if (m.image) {
-          blocks.push({ type: "image", source: { type: "base64", media_type: m.imageType, data: m.image } });
+        for (const im of msgImages(m)) {
+          blocks.push({ type: "image", source: { type: "base64", media_type: im.type, data: im.data } });
         }
         if (!blocks.length) return { role: m.role, content: m.content };
         blocks.push({ type: "text", text: m.content });
@@ -629,9 +677,9 @@ export default function StudyCoach() {
           <div key={i} style={{ ...styles.row, ...(msg.role === "user" ? styles.rowUser : {}) }}>
             {msg.role === "assistant" && <div style={styles.avatar}>🤖</div>}
             <div style={{ ...styles.bubble, ...(msg.role === "user" ? styles.bubbleUser : styles.bubbleBot) }}>
-              {msg.image && (
-                <img src={`data:${msg.imageType};base64,${msg.image}`} alt="opgave" style={styles.uploadedImg} />
-              )}
+              {msgImages(msg).map((im, j) => (
+                <img key={j} src={`data:${im.type};base64,${im.data}`} alt="opgave" style={styles.uploadedImg} />
+              ))}
               {msg.pdfs?.map((p, j) => (
                 <div key={j} style={styles.pdfBadge}>📄 {p.name}</div>
               ))}
@@ -696,14 +744,15 @@ export default function StudyCoach() {
 
       {mode !== null && (
       <footer style={styles.footer}>
-        {(image || pdfs.length > 0) && (
+        {(images.length > 0 || pdfs.length > 0 || processingPhotos) && (
           <div style={styles.attachments}>
-            {image && (
-              <div style={styles.previewWrap}>
-                <img src={`data:${imageType};base64,${image}`} alt="preview" style={styles.preview} />
-                <button onClick={() => setImage(null)} style={styles.removeBtn}>✕</button>
+            {images.map((im, i) => (
+              <div key={i} style={styles.previewWrap}>
+                <img src={`data:${im.type};base64,${im.data}`} alt="preview" style={styles.preview} />
+                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} style={styles.removeBtn}>✕</button>
               </div>
-            )}
+            ))}
+            {processingPhotos && <div style={styles.pdfPreview}>📷 Foto’s verkleinen…</div>}
             {pdfs.map((p, i) => (
               <div key={i} style={styles.pdfPreview}>
                 <span>📄 {p.name}</span>
@@ -713,9 +762,9 @@ export default function StudyCoach() {
           </div>
         )}
         <div style={styles.inputRow}>
-          <button style={styles.iconBtn} onClick={() => fileInputRef.current?.click()} title="Foto">📷</button>
+          <button style={styles.iconBtn} onClick={() => fileInputRef.current?.click()} title="Foto's">📷</button>
           <button style={styles.iconBtn} onClick={() => pdfInputRef.current?.click()} title="PDF">📄</button>
-          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display: "none" }} />
+          <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} style={{ display: "none" }} />
           <input ref={pdfInputRef} type="file" accept="application/pdf" multiple onChange={handlePdfUpload} style={{ display: "none" }} />
           <textarea
             value={input}
@@ -725,11 +774,11 @@ export default function StudyCoach() {
             rows={1}
             style={styles.textarea}
           />
-          <button onClick={sendMessage} disabled={loading || (!input.trim() && !image && !pdfs.length)} style={{ ...styles.sendBtn, opacity: loading || (!input.trim() && !image && !pdfs.length) ? 0.4 : 1 }}>
+          <button onClick={sendMessage} disabled={loading || processingPhotos || (!input.trim() && !images.length && !pdfs.length)} style={{ ...styles.sendBtn, opacity: loading || processingPhotos || (!input.trim() && !images.length && !pdfs.length) ? 0.4 : 1 }}>
             ➤
           </button>
         </div>
-        <p style={styles.hint}>Enter om te sturen · 📷 foto · 📄 PDF met lesstof</p>
+        <p style={styles.hint}>Enter om te sturen · 📷 foto’s (meerdere mag) · 📄 PDF met lesstof</p>
       </footer>
       )}
       <style>{`
