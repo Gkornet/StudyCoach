@@ -56,9 +56,32 @@ export async function POST(req: NextRequest) {
     const status = response?.status ?? 500;
     const errorText = response ? await response.text() : "geen antwoord van API";
     console.error("Anthropic API error:", status, errorText);
-    const friendly = status === 529 || status === 429
-      ? "De AI is even erg druk. Wacht een paar tellen en probeer het opnieuw. 🙏"
-      : `API fout (${status}): ${errorText}`;
+
+    // Probeer de echte reden uit Anthropic's antwoord te halen, zodat we
+    // een grote/te-zware aanvraag niet verwarren met tijdelijke drukte.
+    let errType = "";
+    let errMsg = "";
+    try {
+      const parsed = JSON.parse(errorText);
+      errType = parsed?.error?.type || "";
+      errMsg = parsed?.error?.message || "";
+    } catch { /* geen JSON — laat leeg */ }
+
+    const looksTooBig = status === 413 ||
+      errType === "request_too_large" ||
+      /too long|too large|maximum.*token|prompt is too long/i.test(errMsg);
+
+    let friendly: string;
+    if (looksTooBig) {
+      // Hier helpt wachten niet — de stof past niet in één keer.
+      friendly = "De stof is in één keer te groot om te verwerken. 📄\n\nSplits de PDF in kleinere delen (bijvoorbeeld per hoofdstuk of paragraaf) en stuur die één voor één. Een PDF met minder pagina's tegelijk werkt het best.";
+    } else if (status === 529 || errType === "overloaded_error") {
+      friendly = "De AI is even erg druk. Wacht een paar tellen en probeer het opnieuw. 🙏";
+    } else if (status === 429) {
+      friendly = "Even te veel achter elkaar gevraagd. Wacht ongeveer een halve minuut en probeer het dan opnieuw. ⏳";
+    } else {
+      friendly = `Er ging iets mis (fout ${status})${errMsg ? `: ${errMsg}` : ""}. Probeer het opnieuw.`;
+    }
     return NextResponse.json({ error: friendly }, { status });
   }
 
