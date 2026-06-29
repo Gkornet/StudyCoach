@@ -14,10 +14,12 @@ interface Message {
   content: string;
   image?: string;
   imageType?: string;
-  pdfNames?: string[];
+  pdfs?: PdfFile[];
 }
 
 const SYSTEM_PROMPT = `Jij bent een geduldige studiecoach voor een leerling die moeite heeft met leren. Je helpt met elk vak. Leg alles uit simpel, duidelijk, stap voor stap — zoals aan een kind.
+
+Dit is voorbereiding op de toetsweek: de leerling moet de VOLLEDIGE stof beheersen. Behandel alles compleet, sla niets over, en gebruik uitsluitend wat echt in de stof staat.
 
 ## Markers (altijd gebruiken)
 [keuzes: A | B | C] — sluit elk bericht af met 2–4 keuzes. Na uitleg: "📷 Foto gestuurd" + "✍️ Ik typ het". Na opgave: "📷 Mijn uitwerking" + "✍️ Mijn antwoord typen".
@@ -29,7 +31,7 @@ const SYSTEM_PROMPT = `Jij bent een geduldige studiecoach voor een leerling die 
 ## Sessievolgorde — volg dit strak
 
 ### Stap 1: Micro-instap (bij eerste bijlage)
-Lees de bijlage. Stuur dan alleen dit:
+Lees ALLE bijlagen eerst volledig en grondig. Maak voor jezelf (niet zichtbaar voor de leerling) een complete lijst van élk begrip, definitie, jaartal, formule, regel en type opgave in de stof. Tel ze — dat aantal is je [sessie: N stappen]. Stuur dan alleen dit:
 - Één zin: wat is het onderwerp?
 - "We gaan dit stap voor stap doen. Jij bepaalt het tempo. Klaar om te beginnen?"
 - Noem GEEN lijst van stappen of begrippen. Dat komt later vanzelf.
@@ -61,9 +63,17 @@ Na elke opgave: "Hoe zou jij dit uitleggen aan een vriendin?" Pas verder als ze 
 [voortgang: N]
 [keuzes: 📷 Mijn uitwerking | ✍️ Mijn antwoord typen | Geef een hint | Leg de opgave nog eens uit]
 
-### Stap 6: Afsluiting
+### Stap 6: Afsluiting (pas als ALLES behandeld is)
+Loop eerst je volledige begrippenlijst na tegen de stof: is élk begrip uitgelegd én door de leerling in eigen woorden teruggegeven? Mist er iets, ga eerst terug en behandel dat. Pas als alles zit:
 Kort genummerd spiekbriefje van alle begrippen.
 [sessie-klaar: begrip1 | begrip2 | ...]
+
+## Volledigheid (cruciaal — het is toetsweek)
+- Werk je begrippenlijst volledig en systematisch af, in logische volgorde. Sla niets over, ook niet wat klein of moeilijk lijkt.
+- De stof zit bij élk bericht nog bijgevoegd. Controleer steeds de échte bron in de bijlage; vaar niet blind op je geheugen.
+- Gebruik UITSLUITEND wat in de stof staat — verzin niets bij, voeg geen extra feiten toe. Is iets onleesbaar of onduidelijk? Vraag het de leerling, raad niet.
+- Hoog [voortgang: N] alleen op als een begrip echt zit (de leerling gaf het in eigen woorden terug), niet zomaar.
+- Eindig de sessie pas als élk begrip uit je lijst behandeld én teruggegeven is.
 
 ## Per vak
 **Wiskunde** — formules uitschrijven (geen LaTeX), SVG bij geometrie, stap-voor-stap
@@ -145,10 +155,10 @@ export default function StudyCoach() {
   };
 
   const parseMeta = (text: string) => {
-    const sessie = text.match(/\[sessie:\s*(\d+)\s*stappen?\s*\|\s*~?(\d+)\s*min\]/i);
+    const sessie = text.match(/\[sessie:\s*(\d+)\s*stappen?(?:\s*\|\s*~?(\d+)\s*min)?\]/i);
     if (sessie) {
       setSessionTotal(parseInt(sessie[1]));
-      setSessionMinutes(parseInt(sessie[2]));
+      if (sessie[2]) setSessionMinutes(parseInt(sessie[2]));
       setSessionDone(0);
     }
     const voortgang = text.match(/\[voortgang:\s*(\d+)\]/i);
@@ -195,14 +205,11 @@ export default function StudyCoach() {
       content: userContent,
       image: image || undefined,
       imageType: image ? imageType : undefined,
-      pdfNames: pdfs.length ? pdfs.map(p => p.name) : undefined,
+      pdfs: pdfs.length ? pdfs : undefined,
     };
 
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
-    const sentImage = image;
-    const sentImageType = imageType;
-    const sentPdfs = pdfs;
     setImage(null);
     setPdfs([]);
     setLoading(true);
@@ -210,28 +217,35 @@ export default function StudyCoach() {
     if (pdfInputRef.current) pdfInputRef.current.value = "";
 
     try {
+      // Stof (PDF's) en foto's blijven bij ELKE beurt meegestuurd, zodat de coach
+      // altijd de echte bron heeft en de volledige stof kan afwerken zonder te gokken.
       const apiMessages = newMessages.map((m) => {
-        if (m.image) {
-          return {
-            role: m.role,
-            content: [
-              { type: "image", source: { type: "base64", media_type: m.imageType, data: m.image } },
-              { type: "text", text: m.content },
-            ],
-          };
+        const blocks: Record<string, unknown>[] = [];
+        if (m.pdfs?.length) {
+          for (const p of m.pdfs) {
+            blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: p.data } });
+          }
         }
-        return { role: m.role, content: m.content };
+        if (m.image) {
+          blocks.push({ type: "image", source: { type: "base64", media_type: m.imageType, data: m.image } });
+        }
+        if (!blocks.length) return { role: m.role, content: m.content };
+        blocks.push({ type: "text", text: m.content });
+        return { role: m.role, content: blocks };
       });
 
-      if (sentPdfs.length) {
-        const last = apiMessages[apiMessages.length - 1];
-        apiMessages[apiMessages.length - 1] = {
-          role: last.role,
-          content: [
-            ...sentPdfs.map(p => ({ type: "document", source: { type: "base64", media_type: "application/pdf", data: p.data } })),
-            { type: "text", text: userContent || "Leg de lesstof in deze PDFs uit en geef een samenvatting van de belangrijkste punten." },
-          ],
-        };
+      // Markeer het laatst bijgevoegde document voor prompt-caching, zodat het
+      // herhaald meesturen van de volledige stof goedkoop en snel blijft.
+      outer: for (let i = apiMessages.length - 1; i >= 0; i--) {
+        const content = apiMessages[i].content;
+        if (Array.isArray(content)) {
+          for (let j = content.length - 1; j >= 0; j--) {
+            if (content[j].type === "document") {
+              content[j].cache_control = { type: "ephemeral" };
+              break outer;
+            }
+          }
+        }
       }
 
       const res = await fetch("/api/chat", {
@@ -319,9 +333,11 @@ export default function StudyCoach() {
                   {celebrate ? "⭐" : `Stap ${sessionDone}/${sessionTotal}`}
                 </span>
                 <span style={styles.progressTime}>
-                  {sessionDone < sessionTotal
-                    ? `~${Math.round((sessionTotal - sessionDone) * (sessionMinutes / sessionTotal))} min`
-                    : "🎉 Klaar!"}
+                  {sessionDone >= sessionTotal
+                    ? "🎉 Klaar!"
+                    : sessionMinutes > 0
+                      ? `~${Math.round((sessionTotal - sessionDone) * (sessionMinutes / sessionTotal))} min`
+                      : ""}
                 </span>
               </div>
               <div style={styles.progressTrack}>
@@ -342,8 +358,8 @@ export default function StudyCoach() {
               {msg.image && (
                 <img src={`data:${msg.imageType};base64,${msg.image}`} alt="opgave" style={styles.uploadedImg} />
               )}
-              {msg.pdfNames?.map((name, j) => (
-                <div key={j} style={styles.pdfBadge}>📄 {name}</div>
+              {msg.pdfs?.map((p, j) => (
+                <div key={j} style={styles.pdfBadge}>📄 {p.name}</div>
               ))}
               <div><MessageContent text={msg.content} /></div>
             </div>

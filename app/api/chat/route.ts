@@ -31,7 +31,10 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "claude-opus-4-5",
         max_tokens: 1500,
-        system,
+        // Cache de (lange) systeem-prompt zodat hij niet elke beurt opnieuw telt.
+        system: typeof system === "string" && system.length > 0
+          ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
+          : system,
         messages,
       }),
     });
